@@ -193,7 +193,7 @@ rendered yet beyond a shell.
 - `P6-4` `error.interceptor.ts` normalising failures into a typed `ApiError`; `ERROR_MESSAGES` map from error code → user-facing text.
 - `P6-5` `centsToCurrency` pipe using `Intl.NumberFormat('de-DE', {style:'currency', currency:'EUR'})`.
 - `P6-6` `styles/_tokens.scss` (colour, spacing, radius, type scale, breakpoints), `_mixins.scss` (`respond-to`), `_reset.scss`. Light + dark via `prefers-color-scheme`.
-- `P6-7` App shell: header, router outlet, two routes — `/` (vending) and `/products` (admin) — lazily loaded.
+- `P6-7` App shell: header, router outlet, a `/` landing page with two cards, and lazily loaded `/vending` and `/products` (admin) feature route groups.
 - `P6-8` Tests for the pipe and both API services (`HttpTestingController`).
 
 **Deliverables:** `core/`, `styles/`, routing, shell.

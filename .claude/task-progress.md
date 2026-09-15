@@ -196,6 +196,18 @@ Format: `YYYY-MM-DD — decision — why — alternatives rejected`
   rejected `en-IE`/`en-US`-style formatting (`€1.45`, decimal/thousands swapped
   from what most of the EU expects) even though both are valid ways to render
   the same currency.
+- `2026-09-15` — **`templateUrl` everywhere, and `vending`/`products` each own
+  a `<feature>.routes.ts`** lazy-loaded via `loadChildren` — repo owner asked
+  for "separate modules with their own routing"; confirmed this means the
+  standalone equivalent (own routing, own lazy-loading boundary), not literal
+  `NgModule`s, which §5.2 already rules out — rejected
+  `@NgModule`/`RouterModule.forChild()` (reverses that fixed decision). Added
+  to §5.1/§5.2.
+- `2026-09-15` — **`/` is now a landing page (`features/home/`) with two
+  navigation cards**; vending moved `/` → `/vending` — matches what was asked
+  for ("two centralised card-like buttons ... redirected to the module") —
+  rejected keeping vending at `/` with the landing page on top of it, which
+  would make `/` do two jobs instead of one each.
 
 ---
 
@@ -273,3 +285,16 @@ needs to know.
   text/surface 16.14:1, text-muted/surface 8.66:1 — all ≥4.5:1, focus-ring
   accent against both surface tones sits at 5.3–7.5:1 (≥3:1 non-text
   minimum). Does not close P6 — `P6-1`…`P6-4`/`P6-8` remain.
+- `2026-09-15` — Amended `P6-7` per repo-owner follow-up (rationale in
+  decision log): `vending-page`/`products-page` now use `templateUrl` + a
+  sibling `.html`; each feature owns a `<feature>.routes.ts`, lazy-loaded via
+  `loadChildren` (confirmed as its own chunk in the build output, not just
+  file organisation). Added `features/home/` — a `/` landing page with two
+  `routerLink` cards; vending moved `/` → `/vending`; the shell title is now
+  a link back to `/`. Updated CLAUDE.md §5.1/§5.2 and the plan's P6-7 line to
+  match. `lint`/`build`/`test:ci` green (16/16). Verified live again
+  (`puppeteer-core`, `--no-save`, removed after): each card lands on the
+  right URL/`<h1>`/active nav state, title returns to `/`, still zero
+  horizontal overflow at 320–1440px. A screenshot made the card description
+  look off-grey; computed colour checked out as exactly `--text-muted` —
+  compression artefact, not a bug. P6 still not closed.

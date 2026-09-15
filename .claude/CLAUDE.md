@@ -274,9 +274,11 @@ src/vm-client/
       interceptors/ error.interceptor.ts
       pipes/        cents-to-currency.pipe.ts
     features/
-      vending/      vending-page, coin-slot, product-grid, product-card,
-                    change-tray, machine-display
-      products/     products-page (admin CRUD), product-form-dialog, product-table
+      home/         home-page (landing — cards linking to /vending, /products)
+      vending/      vending.routes.ts, vending-page, coin-slot, product-grid,
+                    product-card, change-tray, machine-display
+      products/     products.routes.ts, products-page (admin CRUD),
+                    product-form-dialog, product-table
     shared/ui/      button, modal, badge, empty-state, confirm-dialog
     styles/         _tokens.scss, _mixins.scss, _reset.scss
 ```
@@ -284,6 +286,12 @@ src/vm-client/
 ### 5.2 Conventions
 
 - **Standalone components only.** No `NgModule`s.
+- **Every component uses `templateUrl` with a separate `.html` file.** Never an
+  inline `template:` string.
+- **Each feature area owns a `<feature>.routes.ts`** exporting a `Routes`
+  array, lazy-loaded from `app.routes.ts` via `loadChildren` — the
+  standalone-era equivalent of a feature module's own routing, without an
+  `NgModule`.
 - **Signals for all state.** `signal()` for writable, `computed()` for derived,
   `resource()`/`httpResource` or explicit loaders for async. No `BehaviorSubject`
   stores. RxJS only where it genuinely fits (debounced input, `switchMap`).
