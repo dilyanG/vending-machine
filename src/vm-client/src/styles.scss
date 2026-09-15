@@ -1,1 +1,10 @@
-/* You can add global styles to this file, and also import other style files */
+@use 'styles/tokens';
+@use 'styles/mixins';
+@use 'styles/reset';
+
+body {
+  background: var(--surface);
+  color: var(--text);
+  font-family: var(--font-family-base);
+  font-size: var(--font-size-base);
+}

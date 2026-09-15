@@ -1,0 +1,15 @@
+@use 'sass:map';
+@use 'tokens';
+
+/// Mobile-first responsive helper — emits a min-width media query for one of
+/// the breakpoints declared in tokens.$breakpoints. Components must never
+/// write a raw @media query; go through this mixin instead.
+@mixin respond-to($breakpoint) {
+  @if not map.has-key(tokens.$breakpoints, $breakpoint) {
+    @error 'Unknown breakpoint `#{$breakpoint}`. Expected one of: #{map.keys(tokens.$breakpoints)}.';
+  }
+
+  @media (min-width: map.get(tokens.$breakpoints, $breakpoint)) {
+    @content;
+  }
+}
