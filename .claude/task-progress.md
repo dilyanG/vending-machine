@@ -9,9 +9,9 @@ the same commit as the work it describes. Rules: `CLAUDE.md` §7.
 
 ## Next up
 
-1. `P1-1` … `P1-5` — domain model and coin rules
-2. `P2-1` … `P2-4` — change calculator
-3. `P3-1` … `P3-6` — product state and CRUD
+1. `P2-1` … `P2-4` — change calculator
+2. `P3-1` … `P3-6` — product state and CRUD
+3. `P4-1` … `P4-7` — vending use cases
 
 ## Open questions
 
@@ -27,13 +27,11 @@ Backend solution + Angular app scaffolded, both lint/build/test clean; root
 docs in place. `P0-1`…`P0-7` all done — see decision/session log for the
 CLI quirks worked around.
 
-### P1 — Domain model and coin rules `[ ]`
+### P1 — Domain model and coin rules `[x]`
 
-- [ ] `P1-1` `Product` entity with guards
-- [ ] `P1-2` `CoinDenominations` {5,10,20,50,100,200}, `MaxQuantityPerProduct = 15`
-- [ ] `P1-3` `CoinBundle` immutable value object
-- [ ] `P1-4` `ErrorCodes` + `DomainException`
-- [ ] `P1-5` Domain unit tests incl. boundaries 0/15/16/-1 and €0.01/€0.02 rejection
+`Product`/`CoinDenominations`/`CoinBundle`/`ErrorCodes`/`DomainException` plus
+47 boundary-table unit tests. `P1-1`…`P1-5` all done — see decision/session
+log for the scope-boundary calls (name/price uniqueness live in P3, not here).
 
 ### P2 — Change calculation `[ ]`
 
@@ -73,14 +71,20 @@ CLI quirks worked around.
 
 ### P6 — Frontend foundation `[ ]`
 
+`P6-5`/`P6-6`/`P6-7` pulled forward ahead of `P1`…`P5`: they don't touch the
+API contract (no models, no HTTP calls), so there's no rework risk, and doing
+them now removes three tasks from the critical path once `P5` unblocks the
+rest of `P6`. `P6-1`…`P6-4` and `P6-8` are still blocked on the `P5` contract.
+
 - [ ] `P6-1` environments + `apiBaseUrl`
 - [ ] `P6-2` Models mirroring API DTOs
 - [ ] `P6-3` `ProductsApiService`, `VendingApiService`
 - [ ] `P6-4` Error interceptor + `ERROR_MESSAGES`
-- [ ] `P6-5` `centsToCurrency` pipe
-- [ ] `P6-6` `_tokens.scss`, `_mixins.scss`, `_reset.scss`, dark mode
-- [ ] `P6-7` App shell + lazy routes `/` and `/products`
-- [ ] `P6-8` Pipe + API service tests
+- [x] `P6-5` `centsToCurrency` pipe
+- [x] `P6-6` `_tokens.scss`, `_mixins.scss`, `_reset.scss`, dark mode
+- [x] `P6-7` App shell + lazy routes `/` and `/products`
+- [ ] `P6-8` Pipe + API service tests (pipe tests already exist from `P6-5`;
+      the API-service half is still blocked on `P6-3`)
 
 ### P7 — Vending UI `[ ]`
 
@@ -161,6 +165,49 @@ Format: `YYYY-MM-DD — decision — why — alternatives rejected`
   defaults to Vitest; overridden to match `CLAUDE.md` §1's fixed
   "Jasmine/Karma" decision. (`--zoneless` was also tried but is a no-op on
   this CLI version — zoneless is already the unconditional default.)
+- `2026-09-15` — **Name-uniqueness and price-distinctness are NOT enforced on
+  `Product`** even though both are hard requirements — they are collection-level
+  rules (comparing one product against every other product), and `Product` has
+  no visibility of its siblings. A single entity cannot enforce them without a
+  static registry or other cross-instance state, which would make every
+  `Product.Create` call secretly stateful and untestable in isolation. They
+  belong to `ProductService` in P3, which already holds the full collection —
+  rejected a static/singleton registry inside `Domain` (violates "Domain
+  references nothing" and makes unit tests order-dependent).
+- `2026-09-15` — **`CoinBundle.Remove` throws `InvalidOperationException`, not
+  `DomainException`, when asked to remove more coins than present** —
+  `ErrorCodes` is fixed to the `CLAUDE.md` §3.3 list, and none of those ten
+  codes generically fits "this bundle doesn't have enough of that coin"; the
+  bundle also has no idea *why* it's being asked (inserted-coins session vs.
+  the coin bank vs. a future context), so it can't safely pick one. Mirrors the
+  BCL `Try*`/throwing convention (e.g. `Queue<T>.Dequeue`): callers where
+  underflow is a real, expected outcome (the P2 change calculator) must use
+  `TryRemove` and choose their own domain-specific error; hitting the throwing
+  `Remove` path means the caller's own invariant was already broken — rejected
+  reusing `CHANGE_UNAVAILABLE` (wrong layer — `CoinBundle` is also used for the
+  session's inserted coins, which have nothing to do with change-making) and
+  rejected adding a new error code (the task fixed `ErrorCodes` to the §3.3
+  list plus `INVALID_PRODUCT` only).
+- `2026-09-15` — **`centsToCurrency` uses the `de-DE` locale**, already named
+  in `CLAUDE.md` §5.3, exported once as `CURRENCY_LOCALE` from the pipe's own
+  file rather than duplicated at each call site — `de-DE` renders EUR as
+  `1,45 €` (comma decimal, period thousands separator, symbol after the
+  amount), which most European reviewers will read correctly at a glance —
+  rejected `en-IE`/`en-US`-style formatting (`€1.45`, decimal/thousands swapped
+  from what most of the EU expects) even though both are valid ways to render
+  the same currency.
+- `2026-09-15` — **`templateUrl` everywhere, and `vending`/`products` each own
+  a `<feature>.routes.ts`** lazy-loaded via `loadChildren` — repo owner asked
+  for "separate modules with their own routing"; confirmed this means the
+  standalone equivalent (own routing, own lazy-loading boundary), not literal
+  `NgModule`s, which §5.2 already rules out — rejected
+  `@NgModule`/`RouterModule.forChild()` (reverses that fixed decision). Added
+  to §5.1/§5.2.
+- `2026-09-15` — **`/` is now a landing page (`features/home/`) with two
+  navigation cards**; vending moved `/` → `/vending` — matches what was asked
+  for ("two centralised card-like buttons ... redirected to the module") —
+  rejected keeping vending at `/` with the landing page on top of it, which
+  would make `/` do two jobs instead of one each.
 
 ---
 
@@ -195,3 +242,59 @@ needs to know.
   on 4200 with the proxy reaching the real backend on 5080 (no `/api/*` route
   exists yet — that's P5). Updated `CLAUDE.md`/`IMPLEMENTATION_PLAN.md` off the
   stale `frontend/` name. Closes P0.
+- `2026-09-15` — P1: `Product` entity (private setters, `Create`/`Restore`
+  factories, `Rename`/`ChangePrice`/`SetQuantity`/`DecrementStock`, all
+  re-validating), `CoinDenominations`, immutable value-equal `CoinBundle`
+  (`Add`/`Remove`/`TryRemove`/`Combine`), `ErrorCodes` (+ new `INVALID_PRODUCT`)
+  and `DomainException`. No collection-level rules (name/price uniqueness) on
+  the entity — see decision log, that's P3's job. `VM.Server.Domain.csproj`
+  still has zero package/project references. 47 new Domain tests (boundary
+  tables via `[Theory]`), solution-wide `dotnet build`/`test` green (49 total).
+  Closes P1.
+- `2026-09-15` — Pulled `P6-5`/`P6-6`/`P6-7` forward (see the P6 heading note)
+  since they're contract-independent. `centsToCurrency`
+  (`core/pipes/cents-to-currency.pipe.ts`): a module-scope `Intl.NumberFormat`,
+  `de-DE` locale exported once, null/undefined → `''`, a dev-mode-only
+  `console.warn` on non-integer input (still formats rather than throwing).
+  Tests assert the real `Intl` output byte-for-byte, including the U+00A0
+  non-breaking space before `€` (verified the exact codepoints with a Node
+  probe first — `0,00 €` etc. — rather than guessing). SCSS token system
+  in `src/styles/`: `_tokens.scss` (semantic custom properties — surface/text/
+  accent/etc., `--space-1`…`--space-8`, a type scale, radius, shadow,
+  transition-duration — redefined under `prefers-color-scheme: dark`, plus a
+  `$breakpoints` Sass map), `_mixins.scss` (`respond-to()` over that map,
+  min-width only), `_reset.scss` (box-sizing, margin reset, img/svg block,
+  form elements inherit font, `prefers-reduced-motion`); root `styles.scss`
+  forwards all three. Added `stylePreprocessorOptions.includePaths:
+  ["src/styles"]` to `angular.json` so any component can `@use 'mixins'`
+  without relative-path climbing. App shell: `App` (`app.ts`/`.html`/`.scss`)
+  now renders a header (title + `routerLink`/`routerLinkActive` nav) and a
+  `max-width`/`--space-4`-gutter container around `<router-outlet>`; two
+  `loadComponent` lazy routes at `''` and `/products` point at new
+  `features/vending/vending-page.ts` and `features/products/products-page.ts`
+  placeholders (title-only, under 10 lines, replaced wholesale in `P7`/`P8`).
+  `npm run lint`/`build`/`test:ci` all green (14/14 specs). Verified live with
+  a scripted Chrome session (`puppeteer-core` against the system Chrome,
+  installed with `--no-save` and removed again afterwards — never touched
+  `package.json`): both routes navigate via the nav links, zero horizontal
+  overflow (`scrollWidth === clientWidth`) at 320/360/768/1024/1440px, and
+  `prefers-color-scheme: dark` flips every custom property with no unreadable
+  text (screenshots inspected at 1024px in both themes, plus 320/360px
+  light). Contrast, read back from the browser's own computed custom
+  properties: light text/surface 17.35:1, text-muted/surface 7.39:1; dark
+  text/surface 16.14:1, text-muted/surface 8.66:1 — all ≥4.5:1, focus-ring
+  accent against both surface tones sits at 5.3–7.5:1 (≥3:1 non-text
+  minimum). Does not close P6 — `P6-1`…`P6-4`/`P6-8` remain.
+- `2026-09-15` — Amended `P6-7` per repo-owner follow-up (rationale in
+  decision log): `vending-page`/`products-page` now use `templateUrl` + a
+  sibling `.html`; each feature owns a `<feature>.routes.ts`, lazy-loaded via
+  `loadChildren` (confirmed as its own chunk in the build output, not just
+  file organisation). Added `features/home/` — a `/` landing page with two
+  `routerLink` cards; vending moved `/` → `/vending`; the shell title is now
+  a link back to `/`. Updated CLAUDE.md §5.1/§5.2 and the plan's P6-7 line to
+  match. `lint`/`build`/`test:ci` green (16/16). Verified live again
+  (`puppeteer-core`, `--no-save`, removed after): each card lands on the
+  right URL/`<h1>`/active nav state, title returns to `/`, still zero
+  horizontal overflow at 320–1440px. A screenshot made the card description
+  look off-grey; computed colour checked out as exactly `--text-muted` —
+  compression artefact, not a bug. P6 still not closed.
