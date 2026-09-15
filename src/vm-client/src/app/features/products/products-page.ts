@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component } from '@angular/core';
 
 @Component({
   selector: 'vm-products-page',
-  template: `<h1>Products</h1>`,
+  templateUrl: './products-page.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ProductsPage {}
