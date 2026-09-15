@@ -9,7 +9,7 @@ the same commit as the work it describes. Rules: `CLAUDE.md` §7.
 
 ## Next up
 
-1. `P0-1` … `P0-7` — repository scaffold
+1. `P0-5`, `P0-6` — Angular app scaffold + ESLint/Prettier
 2. `P1-1` … `P1-5` — domain model and coin rules
 3. `P2-1` … `P2-4` — change calculator
 
@@ -29,7 +29,7 @@ the same commit as the work it describes. Rules: `CLAUDE.md` §7.
 - [x] `P0-4` `Directory.Build.props` (net10.0, nullable, warnings-as-errors)
 - [ ] `P0-5` Angular app scaffold (scss, routing, strict, strictTemplates)
 - [ ] `P0-6` ESLint + Prettier + npm scripts
-- [ ] `P0-7` Root docs in place
+- [x] `P0-7` Root docs in place
 
 ### P1 — Domain model and coin rules `[ ]`
 
@@ -172,3 +172,9 @@ needs to know.
   in Development). `dotnet build`/`dotnet test` green, `/health` verified live
   on port 5080. `CLAUDE.md`/`IMPLEMENTATION_PLAN.md` updated for the
   `Service`/`Repository` naming. Next: P0-5..P0-7 (frontend scaffold + docs).
+- `2026-09-15` — Rewrote the root `README.md` (currency/coins, getting
+  started, tests, project layout, how seeding/CRUD/vending work, API
+  summary, configuration), pointing every path at the real
+  `src/vm-server/VM.Server/VM.Server.*` / `src/vm-client/` layout instead
+  of an earlier `backend/`+`frontend/`+`VendingMachine.*` draft. Closes
+  `P0-7`. Next: P0-5/P0-6 (Angular scaffold + lint/format).
