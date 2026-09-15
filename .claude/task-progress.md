@@ -9,9 +9,9 @@ the same commit as the work it describes. Rules: `CLAUDE.md` §7.
 
 ## Next up
 
-1. `P1-1` … `P1-5` — domain model and coin rules
-2. `P2-1` … `P2-4` — change calculator
-3. `P3-1` … `P3-6` — product state and CRUD
+1. `P2-1` … `P2-4` — change calculator
+2. `P3-1` … `P3-6` — product state and CRUD
+3. `P4-1` … `P4-7` — vending use cases
 
 ## Open questions
 
@@ -27,13 +27,13 @@ Backend solution + Angular app scaffolded, both lint/build/test clean; root
 docs in place. `P0-1`…`P0-7` all done — see decision/session log for the
 CLI quirks worked around.
 
-### P1 — Domain model and coin rules `[ ]`
+### P1 — Domain model and coin rules `[x]`
 
-- [ ] `P1-1` `Product` entity with guards
-- [ ] `P1-2` `CoinDenominations` {5,10,20,50,100,200}, `MaxQuantityPerProduct = 15`
-- [ ] `P1-3` `CoinBundle` immutable value object
-- [ ] `P1-4` `ErrorCodes` + `DomainException`
-- [ ] `P1-5` Domain unit tests incl. boundaries 0/15/16/-1 and €0.01/€0.02 rejection
+- [x] `P1-1` `Product` entity with guards
+- [x] `P1-2` `CoinDenominations` {5,10,20,50,100,200}, `MaxQuantityPerProduct = 15`
+- [x] `P1-3` `CoinBundle` immutable value object
+- [x] `P1-4` `ErrorCodes` + `DomainException`
+- [x] `P1-5` Domain unit tests incl. boundaries 0/15/16/-1 and €0.01/€0.02 rejection
 
 ### P2 — Change calculation `[ ]`
 
@@ -161,6 +161,29 @@ Format: `YYYY-MM-DD — decision — why — alternatives rejected`
   defaults to Vitest; overridden to match `CLAUDE.md` §1's fixed
   "Jasmine/Karma" decision. (`--zoneless` was also tried but is a no-op on
   this CLI version — zoneless is already the unconditional default.)
+- `2026-09-15` — **Name-uniqueness and price-distinctness are NOT enforced on
+  `Product`** even though both are hard requirements — they are collection-level
+  rules (comparing one product against every other product), and `Product` has
+  no visibility of its siblings. A single entity cannot enforce them without a
+  static registry or other cross-instance state, which would make every
+  `Product.Create` call secretly stateful and untestable in isolation. They
+  belong to `ProductService` in P3, which already holds the full collection —
+  rejected a static/singleton registry inside `Domain` (violates "Domain
+  references nothing" and makes unit tests order-dependent).
+- `2026-09-15` — **`CoinBundle.Remove` throws `InvalidOperationException`, not
+  `DomainException`, when asked to remove more coins than present** —
+  `ErrorCodes` is fixed to the `CLAUDE.md` §3.3 list, and none of those ten
+  codes generically fits "this bundle doesn't have enough of that coin"; the
+  bundle also has no idea *why* it's being asked (inserted-coins session vs.
+  the coin bank vs. a future context), so it can't safely pick one. Mirrors the
+  BCL `Try*`/throwing convention (e.g. `Queue<T>.Dequeue`): callers where
+  underflow is a real, expected outcome (the P2 change calculator) must use
+  `TryRemove` and choose their own domain-specific error; hitting the throwing
+  `Remove` path means the caller's own invariant was already broken — rejected
+  reusing `CHANGE_UNAVAILABLE` (wrong layer — `CoinBundle` is also used for the
+  session's inserted coins, which have nothing to do with change-making) and
+  rejected adding a new error code (the task fixed `ErrorCodes` to the §3.3
+  list plus `INVALID_PRODUCT` only).
 
 ---
 
@@ -195,3 +218,12 @@ needs to know.
   on 4200 with the proxy reaching the real backend on 5080 (no `/api/*` route
   exists yet — that's P5). Updated `CLAUDE.md`/`IMPLEMENTATION_PLAN.md` off the
   stale `frontend/` name. Closes P0.
+- `2026-09-15` — P1: `Product` entity (private setters, `Create`/`Restore`
+  factories, `Rename`/`ChangePrice`/`SetQuantity`/`DecrementStock`, all
+  re-validating), `CoinDenominations`, immutable value-equal `CoinBundle`
+  (`Add`/`Remove`/`TryRemove`/`Combine`), `ErrorCodes` (+ new `INVALID_PRODUCT`)
+  and `DomainException`. No collection-level rules (name/price uniqueness) on
+  the entity — see decision log, that's P3's job. `VM.Server.Domain.csproj`
+  still has zero package/project references. 47 new Domain tests (boundary
+  tables via `[Theory]`), solution-wide `dotnet build`/`test` green (49 total).
+  Closes P1.
