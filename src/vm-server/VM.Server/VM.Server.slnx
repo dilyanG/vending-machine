@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/tests/">
+    <Project Path="tests/VM.Server.API.Tests/VM.Server.API.Tests.csproj" />
+    <Project Path="tests/VM.Server.Domain.Tests/VM.Server.Domain.Tests.csproj" />
+    <Project Path="tests/VM.Server.Service.Tests/VM.Server.Service.Tests.csproj" />
+  </Folder>
+  <Project Path="VM.Server.API/VM.Server.API.csproj" />
+  <Project Path="VM.Server.Domain/VM.Server.Domain.csproj" />
+  <Project Path="VM.Server.Repository/VM.Server.Repository.csproj" />
+  <Project Path="VM.Server.Service/VM.Server.Service.csproj" />
+</Solution>

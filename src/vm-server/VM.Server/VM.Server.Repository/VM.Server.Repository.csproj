@@ -1,0 +1,8 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\VM.Server.Domain\VM.Server.Domain.csproj" />
+    <ProjectReference Include="..\VM.Server.Service\VM.Server.Service.csproj" />
+  </ItemGroup>
+
+</Project>
