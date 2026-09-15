@@ -31,7 +31,8 @@ exact change cannot be made, the purchase is refused and your coins are returned
 ## Prerequisites
 
 - [.NET SDK 10.0+](https://dotnet.microsoft.com/download)
-- [Node.js 22 LTS+](https://nodejs.org/) and npm 10+
+- [Node.js 22.22.3+](https://nodejs.org/) (or 24.15+/26+) and npm 10+ —
+  Angular CLI 22 refuses to run on older Node 22.x patches
 
 Check with `dotnet --version` and `node --version`.
 

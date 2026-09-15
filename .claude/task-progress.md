@@ -9,9 +9,9 @@ the same commit as the work it describes. Rules: `CLAUDE.md` §7.
 
 ## Next up
 
-1. `P0-5`, `P0-6` — Angular app scaffold + ESLint/Prettier
-2. `P1-1` … `P1-5` — domain model and coin rules
-3. `P2-1` … `P2-4` — change calculator
+1. `P1-1` … `P1-5` — domain model and coin rules
+2. `P2-1` … `P2-4` — change calculator
+3. `P3-1` … `P3-6` — product state and CRUD
 
 ## Open questions
 
@@ -21,15 +21,11 @@ the same commit as the work it describes. Rules: `CLAUDE.md` §7.
 
 ## Phases
 
-### P0 — Repository scaffold `[~]`
+### P0 — Repository scaffold `[x]`
 
-- [x] `P0-1` git init, `main`, `.gitignore` (.NET + Node + Angular + IDE)
-- [x] `P0-2` `.editorconfig`
-- [x] `P0-3` `VM.Server.slnx` + 4 src projects + 3 test projects, correct references
-- [x] `P0-4` `Directory.Build.props` (net10.0, nullable, warnings-as-errors)
-- [ ] `P0-5` Angular app scaffold (scss, routing, strict, strictTemplates)
-- [ ] `P0-6` ESLint + Prettier + npm scripts
-- [x] `P0-7` Root docs in place
+Backend solution + Angular app scaffolded, both lint/build/test clean; root
+docs in place. `P0-1`…`P0-7` all done — see decision/session log for the
+CLI quirks worked around.
 
 ### P1 — Domain model and coin rules `[ ]`
 
@@ -152,6 +148,19 @@ Format: `YYYY-MM-DD — decision — why — alternatives rejected`
   renaming the existing projects to match the original doc, which would have
   discarded real work to satisfy a plan written before the code existed.
   `CLAUDE.md` and `IMPLEMENTATION_PLAN.md` updated to match.
+- `2026-09-15` — **Upgraded the machine's Node.js 22.11.0 → 22.23.2** (winget)
+  — Angular CLI 22.1.8 hard-refuses below Node `22.22.3`/`24.15`/`26.0` (a
+  blocking check, not a warning) — rejected pinning an older `@angular/cli`,
+  which would break the fixed "Angular 22" decision in `CLAUDE.md` §1.
+- `2026-09-15` — **`"strict"`/`"strictTemplates"` added to `tsconfig.json` by
+  hand** — confirmed by diffing `--strict` vs `--strict=false` scaffolds that
+  CLI 22.1.8's `--strict` flag never writes those two umbrella booleans (only
+  the individual `noImplicit*` flags), even though it does everything else
+  "strict" implies — a CLI templating gap, worked around locally.
+- `2026-09-15` — **`--test-runner=karma` passed explicitly** — CLI 22.1.8
+  defaults to Vitest; overridden to match `CLAUDE.md` §1's fixed
+  "Jasmine/Karma" decision. (`--zoneless` was also tried but is a no-op on
+  this CLI version — zoneless is already the unconditional default.)
 
 ---
 
@@ -161,20 +170,28 @@ One line per working session: date, phases touched, anything the next session
 needs to know.
 
 - `2026-09-15` — Planning. Wrote `CLAUDE.md`, `README.md`,
-  `IMPLEMENTATION_PLAN.md` and this tracker. No code yet. Next: P0.
-- `2026-09-15` — Executed P0-1..P0-4 (backend half of P0) on `iteration-01`.
-  Added root `.gitignore`/`.editorconfig`, wired the four existing
-  `VM.Server.*` projects into `VM.Server.slnx` with the correct dependency
-  direction (none had any `ProjectReference` before this), added the three
-  xUnit test projects, consolidated shared MSBuild properties into
-  `Directory.Build.props`, and replaced the MVC-controller `Program.cs`
-  scaffold with a minimal API (`/health` only, CORS policy `frontend`, Swagger
-  in Development). `dotnet build`/`dotnet test` green, `/health` verified live
-  on port 5080. `CLAUDE.md`/`IMPLEMENTATION_PLAN.md` updated for the
-  `Service`/`Repository` naming. Next: P0-5..P0-7 (frontend scaffold + docs).
-- `2026-09-15` — Rewrote the root `README.md` (currency/coins, getting
-  started, tests, project layout, how seeding/CRUD/vending work, API
-  summary, configuration), pointing every path at the real
-  `src/vm-server/VM.Server/VM.Server.*` / `src/vm-client/` layout instead
-  of an earlier `backend/`+`frontend/`+`VendingMachine.*` draft. Closes
-  `P0-7`. Next: P0-5/P0-6 (Angular scaffold + lint/format).
+  `IMPLEMENTATION_PLAN.md` and this tracker. No code yet.
+- `2026-09-15` — P0-1..P0-4: root `.gitignore`/`.editorconfig`, `VM.Server.*`
+  projects wired into `VM.Server.slnx` with correct dependency direction,
+  three xUnit test projects added, `Directory.Build.props`, minimal-API
+  `Program.cs` (`/health`, CORS policy `frontend`, Swagger). `dotnet
+  build`/`test` green, `/health` verified live on 5080.
+- `2026-09-15` — Rewrote root `README.md` to match the real
+  `src/vm-server/`/`src/vm-client/` layout (was drafted against an earlier
+  `backend/`+`frontend/` naming). Closes P0-7.
+- `2026-09-15` — P0-5/P0-6: Node.js on the machine (22.11.0) was below
+  Angular CLI 22's hard minimum (22.22.3), so `ng new` refused to run at all;
+  upgraded Node to 22.23.2 via winget first (repo owner's go-ahead). Scaffolded
+  `vm-client` in place (standalone, zoneless-by-default, karma), hand-fixed a
+  CLI gap where `--strict` doesn't actually write `"strict"`/`"strictTemplates"`
+  into `tsconfig.json`, added the dev proxy, wired `@angular-eslint` with
+  explicit `prefer-signals`/`prefer-output-emitter-ref` rules (bans
+  `@Input()`/`@Output()`/`@ViewChild()`), Prettier + `eslint-config-prettier`,
+  and the `test:ci`/`lint:fix`/`format`/`format:check` scripts. Replaced the
+  default boilerplate shell with a minimal `<h1>` + `<router-outlet>`; deleted
+  the CLI's own `README.md`/`.editorconfig` inside `vm-client/` (the latter had
+  `root = true` and would have shadowed the repo-root LF rule). `npm install`,
+  `lint`, `build`, `test:ci` (2/2) and `format:check` all green; verified live
+  on 4200 with the proxy reaching the real backend on 5080 (no `/api/*` route
+  exists yet — that's P5). Updated `CLAUDE.md`/`IMPLEMENTATION_PLAN.md` off the
+  stale `frontend/` name. Closes P0.

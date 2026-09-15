@@ -31,8 +31,8 @@ P0 ─ P1 ─ P2 ─ P3 ─ P4 ─┬─ P5 ─ P6 ─ P7 ─ P8 ─ P9
 - `P0-2` Add `.editorconfig` (4 spaces C#, 2 spaces TS/HTML/SCSS, LF, UTF-8, final newline).
 - `P0-3` Create `backend/VendingMachine.sln` with the four `src` projects and three `tests` projects, wired with the dependency direction from `CLAUDE.md` §4.1.
 - `P0-4` Add `backend/Directory.Build.props`: `net10.0`, `Nullable=enable`, `ImplicitUsings=enable`, `TreatWarningsAsErrors=true`, `LangVersion=latest`.
-- `P0-5` Scaffold the Angular app: `ng new frontend --style=scss --ssr=false --routing`, strict mode on, `strictTemplates` on.
-- `P0-6` Add ESLint + Prettier to the frontend; `npm run lint`, `npm run format`.
+- `P0-5` Scaffold the Angular app into `src/vm-client/`: `ng new vm-client --directory=. --style=scss --ssr=false --routing`, strict mode on, `strictTemplates` on.
+- `P0-6` Add ESLint + Prettier to `vm-client/`; `npm run lint`, `npm run format`.
 - `P0-7` Copy `CLAUDE.md`, `README.md`, `IMPLEMENTATION_PLAN.md`, `task-progress.md` to the repo root.
 
 **Deliverables:** repo tree, solution file, Angular app, config files.

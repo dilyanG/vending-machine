@@ -36,7 +36,7 @@ Deliverables: a README describing how to build and run, plus a link to the repo.
 | --- | --- |
 | Backend | .NET 10 (LTS), C# 14, ASP.NET Core Minimal APIs |
 | Frontend | Angular 22, standalone components, signals, TypeScript strict |
-| Repo | Monorepo: `backend/` + `frontend/` |
+| Repo | Monorepo: `backend/` + `vm-client/` |
 | State | In-memory, thread-safe singleton store in the backend. **No database.** |
 | Currency | **EUR** |
 | Mock "external resource" | A dedicated mock-catalog endpoint inside the backend, reading a seed JSON file |
@@ -265,7 +265,7 @@ nothing.** Do not let ASP.NET types leak below `API`.
 ### 5.1 Layout
 
 ```
-frontend/
+src/vm-client/
   src/app/
     core/
       api/          products-api.service.ts, vending-api.service.ts, api-error.ts
