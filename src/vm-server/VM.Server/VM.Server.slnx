@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="VM.Server.API/VM.Server.API.csproj" />
+  <Project Path="VM.Server.Domain/VM.Server.Domain.csproj" />
+  <Project Path="VM.Server.Repository/VM.Server.Repository.csproj" />
+  <Project Path="VM.Server.Service/VM.Server.Service.csproj" />
+</Solution>
