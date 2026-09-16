@@ -41,6 +41,26 @@ public class VendingMachineTests
     }
 
     [Fact]
+    public void Load_WithDuplicateNamesCaseInsensitive_ThrowsDuplicateProduct()
+    {
+        var products = new[] { Product.Create("Espresso", 145), Product.Create("ESPRESSO", 195) };
+
+        var act = () => VendingMachine.Load(products, new Dictionary<int, int>(), 5);
+
+        act.Should().Throw<DomainException>().Which.Code.Should().Be(ErrorCodes.DuplicateProduct);
+    }
+
+    [Fact]
+    public void AddSlot_WithDuplicateName_ThrowsDuplicateProduct()
+    {
+        var machine = LoadSingleProductMachine(145, 5, new Dictionary<int, int>(), out _);
+
+        var act = () => machine.AddSlot(Product.Create("espresso", 195), 5);
+
+        act.Should().Throw<DomainException>().Which.Code.Should().Be(ErrorCodes.DuplicateProduct);
+    }
+
+    [Fact]
     public void Load_WithDuplicateIds_ThrowsDuplicateProduct()
     {
         var espresso = Product.Create("Espresso", 145);
