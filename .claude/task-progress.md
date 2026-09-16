@@ -58,27 +58,11 @@ below and the decision log. `CoinBundle`/`P1-3` superseded.
 
 ### P3 — Service layer: products `[x]`
 
-Executed on top of the P1-6..P1-8 aggregate, ahead of P2 (change calculator
-not needed for product CRUD). `P3-1`…`P3-6` all done.
-
-- [x] `P3-1` `IVendingMachineStore`, `IExternalCatalogSource` (not
-      `IProductStore`/`ICoinBank` — the `VendingMachine` aggregate replaced
-      both; `CLAUDE.md` §4.1 corrected)
-- [x] `P3-2` `catalogue.seed.json` — 6 products, distinct prices 85-245c, no
-      quantity field
-- [x] `P3-3` `FileExternalCatalogSource` — read-only, `System.Text.Json`
-      camelCase, fails loudly (not silently empty) on a missing/malformed file
-- [x] `P3-4` `InMemoryVendingMachineStore` — `SemaphoreSlim`-guarded
-      once-only lazy load, `VendingMachine:CoinBank` /
-      `VendingMachine:InitialQuantityPerSlot` via `IOptions`, `ReloadAsync()`
-- [x] `P3-5` `ProductService` — CRUD over the aggregate's slots, mapping only;
-      every validation rule delegated to the domain. Added name-uniqueness
-      (case-insensitive) to `VendingMachine` itself per this task's own
-      instruction — the one collection invariant P1 hadn't covered
-- [x] `P3-6` 15 tests: concurrent-first-call-reads-once, CRUD reflected in
-      reads, byte-identical seed file after CRUD (SHA-256 before/after),
-      duplicate name/price, quantity 16, price 3, reload discards edits,
-      delete of an unknown id
+`IVendingMachineStore`/`IExternalCatalogSource`, `FileExternalCatalogSource`,
+`InMemoryVendingMachineStore`, `ProductService`, 15 tests (incl. byte-identical
+seed file and a real concurrent-first-call race). `P3-1`…`P3-6` all done,
+executed ahead of P2 (see decision/session log for the store/name-uniqueness
+calls) — see `CLAUDE.md` §2.6/§4.1.
 
 ### P4 — Application layer: vending `[ ]`
 
@@ -100,22 +84,28 @@ not needed for product CRUD). `P3-1`…`P3-6` all done.
 - [ ] `P5-6` `WebApplicationFactory` integration tests covering every route
 - [ ] **Contract frozen** — note the date here once P5 is merged
 
-### P6 — Frontend foundation `[ ]`
+### P6 — Frontend foundation `[~]`
 
-`P6-5`/`P6-6`/`P6-7` pulled forward ahead of `P1`…`P5`: they don't touch the
-API contract (no models, no HTTP calls), so there's no rework risk, and doing
-them now removes three tasks from the critical path once `P5` unblocks the
-rest of `P6`. `P6-1`…`P6-4` and `P6-8` are still blocked on the `P5` contract.
+`P6-5`/`P6-6`/`P6-7` pulled forward ahead of `P1`…`P5` since they don't touch
+the API contract (no models, no HTTP calls). `P6-1`/`P6-4` pulled forward the
+same way — environments and the error interceptor are pure client-side
+plumbing that doesn't need P5 either. `P6-9` (shared UI primitives) is a new
+task, pulled forward from what P7/P8 will need, for the same contract-free
+reason. Only `P6-2`/`P6-3`/`P6-8` remain, and all three are genuinely blocked
+on the `P5` contract (they mirror/call the actual API DTOs).
 
-- [ ] `P6-1` environments + `apiBaseUrl`
+- [x] `P6-1` environments + `apiBaseUrl`
 - [ ] `P6-2` Models mirroring API DTOs
 - [ ] `P6-3` `ProductsApiService`, `VendingApiService`
-- [ ] `P6-4` Error interceptor + `ERROR_MESSAGES`
+- [x] `P6-4` Error interceptor + `ERROR_MESSAGES`
 - [x] `P6-5` `centsToCurrency` pipe
 - [x] `P6-6` `_tokens.scss`, `_mixins.scss`, `_reset.scss`, dark mode
 - [x] `P6-7` App shell + lazy routes `/` and `/products`
 - [ ] `P6-8` Pipe + API service tests (pipe tests already exist from `P6-5`;
       the API-service half is still blocked on `P6-3`)
+- [x] `P6-9` Shared UI primitives (`vm-button`, `vm-badge`, `vm-modal`,
+      `vm-confirm-dialog`, `vm-empty-state`) — pulled forward from P7/P8's
+      dependencies
 
 ### P7 — Vending UI `[ ]`
 
@@ -300,6 +290,41 @@ Format: `YYYY-MM-DD — decision — why — alternatives rejected`
   quantity in the seed file (the two are genuinely different data: one
   travels with the product, the other belongs to a specific machine
   instance and is reset by `Reload`/restart either way).
+- `2026-09-16` — **`CLAUDE.md` §3.3's error code list was missing
+  `INVALID_PRODUCT`** (live in `ErrorCodes.cs` and used by `Product`/P3 since
+  the P1 reopening, but never added to the doc) — caught while building the
+  frontend `ErrorCode` union off §3.3 and cross-checking it against the
+  actual backend source rather than trusting the doc alone; added it to both
+  §3.3 and the frontend union. A stale contract doc is worse than a missing
+  one, since it looks authoritative.
+- `2026-09-16` — **`apiBaseUrl` is `''` in both `environment.ts` and
+  `environment.development.ts`**, not just dev — this task said dev must be
+  empty (the proxy handles it), but was silent on production; since nothing
+  in the project defines a separate production deployment topology (frontend
+  and API assumed same-origin), an empty string is the simplest default that
+  works either way — rejected hard-coding `http://localhost:5080` anywhere
+  (explicitly ruled out) and rejected inventing a production URL with
+  nothing to point it at. Also fixed a stale README config row that had
+  claimed the default was `http://localhost:5080`.
+- `2026-09-16` — **`ApiError.message` keeps the server's/transport's raw
+  message; `ERROR_MESSAGES[code]` is the only thing ever shown to a user** —
+  keeps "data" (what actually happened, for logs/devtools) and "presentation"
+  (what CLAUDE.md §5.3 allows on screen) as two separate concerns per the
+  task's own split into two deliverables (an `ApiError` type and a separate
+  `ERROR_MESSAGES` map) — rejected overwriting `message` with the friendly
+  text in the interceptor, which would have thrown away the original server
+  message with nowhere left to log it.
+- `2026-09-16` — **`vm-modal` adds its own Tab-wrap focus trap** rather than
+  relying solely on native `<dialog>`/`showModal()` — verified live (real
+  keyboard input via a scripted Chrome session, not synthetic DOM events,
+  since focus-navigation isn't scriptable that way) that Chrome's native
+  modal containment stops focus from reaching background content but does
+  **not** wrap it: tabbing off the last focusable element inside the dialog
+  landed on `<body>` instead of cycling back to the first element. Added an
+  explicit `(keydown.Tab)` handler that wraps at both ends — confirmed fixed
+  with the same live check afterward. Escape-to-close, initial focus
+  placement and outside-content containment are still left entirely to the
+  browser, since those parts do work natively.
 
 ---
 
@@ -427,3 +452,33 @@ needs to know.
   Updated `CLAUDE.md` §2.6/§4.1 and README's Design notes/Configuration
   table. P2 still open — flagged in Next up since P4's `Purchase` needs a
   real `IChangeCalculator`, not just the interface.
+- `2026-09-16` — P6-1/P6-4/P6-9, pulled forward (contract-free, see the P6
+  heading note): `environment.ts`/`environment.development.ts`
+  (`apiBaseUrl: ''` both, wired via `angular.json`'s `development`
+  `fileReplacements`); `core/api/api-error.ts` (`ErrorCode` — all ten §3.3
+  codes, caught and fixed one missing from the doc, `INVALID_PRODUCT` — plus
+  client-only `NETWORK_ERROR`/`UNKNOWN_ERROR`) and `error-messages.ts`
+  (`ERROR_MESSAGES satisfies Record<ErrorCode, string>`, vending-machine
+  voice, `getErrorMessage()` fallback); `error.interceptor.ts` distinguishing
+  a well-formed §3.3 body, an unrecognised one, and `status === 0`, wired
+  into `app.config.ts` via `provideHttpClient(withFetch(),
+  withInterceptors(...))`. Five `shared/ui/` primitives (`vm-button`,
+  `vm-badge`, `vm-modal`, `vm-confirm-dialog`, `vm-empty-state`), each
+  standalone/OnPush/`input()`/`output()`, styled only from P6-6 tokens (grepped
+  `shared/ui/` for hex/`rgb()`/`@media` — zero hits; the only literal `px`
+  values left are 1-2px border/outline widths, which aren't spacing-scale
+  values). `vm-modal` wraps a native `<dialog>` — added `--danger-contrast`,
+  `--overlay-color`, `--touch-target-min`, `--measure-max-width` tokens it
+  needed. Found (live, see decision log) that native `showModal()` doesn't
+  wrap Tab at the dialog's boundaries, so added an explicit trap; re-verified
+  live afterward that it does now, that Escape still closes both `vm-modal`
+  and `vm-confirm-dialog` and returns focus to the trigger, and that all five
+  primitives render correctly in light and dark (screenshots at both, plus
+  the two dialogs open). Verification used a temporary showcase wired into
+  `home-page`/`puppeteer-core` (`--no-save`), both fully reverted before
+  committing — confirmed `git status`/`home-page`'s bundle size are back to
+  their pre-showcase state. `lint`/`build`/`test:ci` green (45/45; two modal
+  tests were flaky until rewritten to await the real `close` event instead of
+  a `setTimeout` racing the same browser-internal queued task). Fixed
+  `CLAUDE.md` §3.3 and a stale README config row along the way (see decision
+  log). P6 now `[~]`; `P6-2`/`P6-3`/`P6-8` remain, blocked on P5.

@@ -161,7 +161,7 @@ back exactly the coins you put in without buying anything.
 | --- | --- | --- |
 | Backend port | `src/vm-server/VM.Server/VM.Server.API/Properties/launchSettings.json` | `5080` |
 | Allowed CORS origin | `src/vm-server/VM.Server/VM.Server.API/appsettings.Development.json` → `Cors:AllowedOrigins` | `http://localhost:4200` |
-| API base URL | `src/vm-client/src/environments/environment.ts` | `http://localhost:5080` |
+| API base URL | `src/vm-client/src/environments/environment*.ts` | `''` (relative `/api`; the dev proxy forwards it to `:5080`) |
 | Initial coin bank | `appsettings.json` → `VendingMachine:CoinBank` | see file |
 | Initial quantity per product | `appsettings.json` → `VendingMachine:InitialQuantityPerSlot` | `10` |
 | Seed products | `.../VM.Server.Repository/MockExternalApi/catalogue.seed.json` | 6 products, no quantity |
