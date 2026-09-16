@@ -9,8 +9,9 @@ the same commit as the work it describes. Rules: `CLAUDE.md` §7.
 
 ## Next up
 
-1. `P5-1` … `P5-6` — HTTP API
-2. `P6-2`, `P6-3`, `P6-8` — the frontend pieces still blocked on the P5 contract
+1. `P6-2`, `P6-3` — API DTOs and `ProductsApiService`/`VendingApiService`,
+   unblocked now the contract is frozen
+2. `P6-8` — the API-service half of this (pipe tests already exist)
 3. `P7-1` … `P7-9` — vending UI
 
 ## Open questions
@@ -119,15 +120,48 @@ refactor already absorbed most of it. See decision log.
       descending, a `DomainException` surfacing with its code intact,
       `GetDenominationsAsync` ascending, `ResetAsync` round-trip
 
-### P5 — HTTP API `[ ]`
+### P5 — HTTP API `[x]`
 
-- [ ] `P5-1` Minimal API endpoint groups
-- [ ] `P5-2` DTOs per `CLAUDE.md` §3.2
-- [ ] `P5-3` Exception middleware → §3.3 error shape
-- [ ] `P5-4` DI, CORS policy `frontend`, Swagger
-- [ ] `P5-5` Port fixed to 5080
-- [ ] `P5-6` `WebApplicationFactory` integration tests covering every route
-- [ ] **Contract frozen** — note the date here once P5 is merged
+**Contract frozen: 2026-09-16.** Every route, payload and error shape in
+`CLAUDE.md` §3 is now live and tested; the frontend can build against it from
+`P6-2`/`P6-3` onward.
+
+- [x] `P5-1` `ExternalEndpoints`/`ProductEndpoints`/`VendingEndpoints` — one
+      static class per group, `MapGroup` + extension methods, registered from
+      `Program.cs`. Routes exactly as §3.1, nothing extra.
+- [x] `P5-2` DTOs matching §3.2: reused the existing `ProductDto`/`SessionDto`/
+      `PurchaseResultDto`/`ReturnedCoinsDto`/`CoinCountDto` from Service
+      (P3/P4) as the response bodies directly rather than duplicating
+      structurally-identical API-layer copies; added API-only
+      `ExternalProductDto` (no quantity), `CreateProductRequest`,
+      `UpdateProductRequest`, `InsertCoinRequest`, `PurchaseRequest` and
+      `ErrorResponseDto` for the shapes Service didn't already have
+- [x] `P5-3` `ExceptionHandlingMiddleware` — maps `DomainException` to the
+      §3.3 body with the exact status table; unmapped/non-domain exceptions
+      → 500 with a generic body (no stack trace, type name or path, in any
+      environment); business refusals logged at `Information`, everything
+      else at `Error`
+- [x] `P5-4` `AddVendingMachineBackend` (P4) plus a config-binding fix (see
+      decision log); CORS policy `frontend` from config; OpenAPI JSON in
+      Development via the already-referenced `Microsoft.AspNetCore.OpenApi`,
+      plus a zero-new-package CDN-loaded Swagger UI at `/swagger` (Development
+      only) so `.Produces<T>()` response/error documentation is actually
+      browsable, not just raw JSON
+- [x] `P5-5` `launchSettings.json` already had the HTTP-only profile on 5080
+      since P0 — confirmed, no change needed
+- [x] `P5-6` 26 `WebApplicationFactory` integration tests — every §3.1 route,
+      every error code asserted by its `code` field (not just status), the
+      full happy path, `CHANGE_UNAVAILABLE` leaving the session intact,
+      reset/reload round trips, and a 500-with-no-leak test (a test-only fake
+      `IVendingMachineStore`, not a production backdoor — see decision log).
+      **Isolation: each test class owns its own `WebApplicationFactory`**
+      (created in the constructor, disposed via `IDisposable`) rather than a
+      shared `IClassFixture` — xUnit's per-test class instantiation then
+      gives every test its own singleton store for free, no explicit reset
+      needed
+- [x] `P5-7` Six placeholder product SVGs in
+      `src/vm-client/public/assets/products/`, one per `catalogue.seed.json`
+      `imageUrl` — confirmed every path resolves
 
 ### P6 — Frontend foundation `[~]`
 
@@ -423,6 +457,52 @@ Format: `YYYY-MM-DD — decision — why — alternatives rejected`
   the registrations in API directly, which would need to reference
   Repository's concrete types anyway and scatters wiring across two
   projects instead of one.
+- `2026-09-16` — **Found and fixed a real P4 bug while doing P5's required
+  manual curl verification**: `AddVendingMachineBackend` registered
+  `InMemoryVendingMachineStore` but never called
+  `services.Configure<VendingMachineOptions>(...)`, so `IOptions` silently
+  fell back to an all-default instance — an **empty** coin bank in the
+  actual running app (`InitialQuantityPerSlot` happened to still default
+  correctly to 10, masking half the bug). Every unit test had bypassed this
+  entirely by constructing `Options.Create(new VendingMachineOptions {...})`
+  directly, so nothing caught it before a real HTTP purchase did. Fixed by
+  binding in `API/Program.cs` instead of `Repository`: the
+  `Configure<TOptions>(IConfiguration)` overload lives in
+  `Microsoft.Extensions.Options.ConfigurationExtensions`, which a plain
+  class library like `Repository` doesn't have, but which `API` gets for
+  free via the ASP.NET Core shared framework (`Microsoft.NET.Sdk.Web`) —
+  so no new package was needed. This is exactly why the phase's "start the
+  API and run the full happy path with curl" step exists rather than
+  trusting build-green/tests-green alone.
+- `2026-09-16` — **API endpoints return the existing Service-layer DTOs
+  directly** (`ProductDto`, `SessionDto`, `PurchaseResultDto`,
+  `ReturnedCoinsDto`, `CoinCountDto`) rather than a parallel set of
+  structurally-identical `API.Dtos.*` types — they already match §3.2's wire
+  shapes exactly (camelCase via STJ defaults, quantity already assembled
+  from the slot), so a second copy would be pure duplication mapped by a
+  method that does nothing. New API-only DTOs were added only for shapes
+  Service doesn't have a reason to own: `ExternalProductDto` (no quantity -
+  a different shape from `ProductDto`, and mapping it is genuinely an API
+  concern since `IExternalCatalogSource` returns raw `Product` entities) and
+  the four request records (`Create`/`UpdateProductRequest`,
+  `InsertCoinRequest`, `PurchaseRequest`), since Service's methods take
+  primitives, not request objects.
+- `2026-09-16` — **A CDN-loaded Swagger UI page at `/swagger` (Development
+  only), not just the bare OpenAPI JSON from `MapOpenApi()`** — costs no new
+  NuGet package (`swagger-ui-dist` loads from `cdn.jsdelivr.net` in a small
+  static HTML page, gated behind `IsDevelopment()`), fulfills the README's
+  pre-existing "Swagger UI" promise literally, and is genuinely useful for a
+  reviewer who wants to click through the API rather than read raw JSON —
+  rejected adding the Swashbuckle package (violates "no new packages") and
+  rejected downgrading the README's claim to describe raw JSON only, when a
+  real UI was achievable for free.
+- `2026-09-16` — **`POST /api/products/reload` and the `DELETE`/create
+  actions return `204 No Content`/`201 Created` respectively**, choices
+  `CLAUDE.md` §3 doesn't pin down explicitly (only the purchase/reset
+  bodies are shown) — standard REST convention, and reload in particular
+  has no natural response body to promise since its entire job is
+  discarding state, not returning it (callers needing the refreshed list
+  already have `GET /api/products` for that).
 
 ---
 
@@ -617,3 +697,27 @@ needs to know.
   `VM.Server.Service.csproj` still only references Domain. 101 tests total
   across the solution (79 Domain + 21 Service + 1 API placeholder), all
   green. Closes P4. Next: P5 (HTTP API, contract freeze).
+- `2026-09-16` — P5 (`P5-1`…`P5-7`), the API contract frozen:
+  `ExternalEndpoints`/`ProductEndpoints`/`VendingEndpoints` (Minimal API,
+  `MapGroup`), `ExceptionHandlingMiddleware` (§3.3 shape, exact status
+  table, Information/Error log split), DI + CORS + OpenAPI/Swagger wired
+  into `Program.cs`. Caught and fixed a real bug during the required manual
+  curl pass: the coin bank was silently empty in the live app because P4's
+  DI never bound `VendingMachineOptions` from configuration (see decision
+  log) - unit tests never would have caught this since they all construct
+  options directly. 26 new `WebApplicationFactory` integration tests
+  (isolation: one factory per test class instance, documented in
+  `TestApp.cs`) cover every route, every error code by its `code` field,
+  the full happy path, `CHANGE_UNAVAILABLE` leaving the session untouched,
+  reset/reload round trips, and a 500 with no leaked detail (via a
+  test-only throwing fake, not a production backdoor). Six placeholder
+  product SVGs added under `src/vm-client/public/assets/products/`, every
+  `catalogue.seed.json` `imageUrl` confirmed to resolve. Pasted the full
+  manual verification: `dotnet build`/`test` (126 total, all green),
+  denominations → insert 100/50/20 → session → purchase (paid 170, price
+  85, change 85 = 50+20+10+5, quantity 10→9) → insert 200/10 → reset
+  (returned 200+10) → session empty, plus a deliberate `CHANGE_UNAVAILABLE`
+  (422, empty-bank override) and a deliberate `PRODUCT_NOT_FOUND` (404).
+  README's routes and Swagger claim already matched exactly - no changes
+  needed. Closes P5. Next: P6-2/P6-3 (frontend API services), now
+  unblocked.
