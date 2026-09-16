@@ -1,0 +1,10 @@
+<vm-modal [open]="open()" (closed)="closed.emit()">
+  <h2 modal-header>{{ title() }}</h2>
+  <p modal-body>{{ message() }}</p>
+  <div modal-footer>
+    <vm-button variant="ghost" (click)="onCancel()">{{ cancelLabel() }}</vm-button>
+    <vm-button [variant]="danger() ? 'danger' : 'primary'" (click)="onConfirm()">{{
+      confirmLabel()
+    }}</vm-button>
+  </div>
+</vm-modal>
