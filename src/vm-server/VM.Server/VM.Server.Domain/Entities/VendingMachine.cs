@@ -148,6 +148,14 @@ public sealed class VendingMachine
                     new Dictionary<string, object> { ["productId"] = candidate.Id });
             }
 
+            if (string.Equals(slot.Product.Name, candidate.Name, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new DomainException(
+                    ErrorCodes.DuplicateProduct,
+                    $"A product named '{candidate.Name}' already exists.",
+                    new Dictionary<string, object> { ["name"] = candidate.Name });
+            }
+
             if (slot.Product.PriceCents == candidate.PriceCents)
             {
                 throw new DomainException(
