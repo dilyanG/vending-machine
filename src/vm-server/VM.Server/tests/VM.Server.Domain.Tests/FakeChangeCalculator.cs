@@ -9,9 +9,9 @@ internal sealed class FakeChangeCalculator(Func<int, IReadOnlyDictionary<int, in
     public IReadOnlyDictionary<int, int>? LastAvailableCoins { get; private set; }
 
     public static FakeChangeCalculator AlwaysSucceedsWith(IReadOnlyDictionary<int, int> coins) =>
-        new((_, _) => ChangeResult.Success(coins));
+        new((_, _) => ChangeResult.Made(coins));
 
-    public static FakeChangeCalculator AlwaysFails() => new((_, _) => ChangeResult.Failure());
+    public static FakeChangeCalculator AlwaysFails() => new((_, _) => ChangeResult.NotPossible());
 
     public ChangeResult Calculate(int amountCents, IReadOnlyDictionary<int, int> availableCoins)
     {

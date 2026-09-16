@@ -6,7 +6,9 @@ public sealed record ChangeResult
 
     public IReadOnlyDictionary<int, int> Coins { get; private init; } = new Dictionary<int, int>();
 
-    public static ChangeResult Success(IReadOnlyDictionary<int, int> coins) => new() { IsSuccess = true, Coins = coins };
+    public int TotalCents => Coins.Sum(coin => coin.Key * coin.Value);
 
-    public static ChangeResult Failure() => new() { IsSuccess = false };
+    public static ChangeResult Made(IReadOnlyDictionary<int, int> coins) => new() { IsSuccess = true, Coins = coins };
+
+    public static ChangeResult NotPossible() => new() { IsSuccess = false };
 }
