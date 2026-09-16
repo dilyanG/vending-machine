@@ -138,12 +138,25 @@ but never decides).
 
 ### 2.6 Seeding from the "external resource"
 
-- `src/vm-server/VM.Server/VM.Server.Repository/MockExternalApi/catalog.seed.json`
-  is the mock external resource.
+- `src/vm-server/VM.Server/VM.Server.Repository/MockExternalApi/catalogue.seed.json`
+  is the mock external resource — six products (`id`, `name`, `priceCents`,
+  `imageUrl`). It carries **no quantity**: an external product catalogue
+  wouldn't know this machine's stock levels, so every slot's starting quantity
+  comes from configuration (`VendingMachine:InitialQuantityPerSlot`) instead,
+  applied uniformly to every product when the machine loads.
+- `FileExternalCatalogSource` (`IExternalCatalogSource`) reads that file
+  read-only via `System.Text.Json`; it never writes and never caches to disk,
+  and fails loudly — not with a silent empty catalogue — if the file is
+  missing or malformed.
 - It is exposed read-only at `GET /api/external/catalog` so a reviewer can see
   it is genuinely a separate source.
-- The in-memory store loads from it **once**, lazily, on first access.
-- CRUD mutates the in-memory store **only**. The seed file is never written.
+- `InMemoryVendingMachineStore` (`IVendingMachineStore`) holds the single
+  `VendingMachine` aggregate for the app's lifetime. It loads from the
+  external source **once**, lazily, on first access — `SemaphoreSlim`-guarded
+  so concurrent first requests can't seed it twice — and the same guard
+  serialises every subsequent read or mutation into the aggregate.
+- CRUD mutates the in-memory aggregate **only**. The seed file is never
+  written.
 - `POST /api/products/reload` re-seeds from the external resource (discarding
   in-memory changes) — useful for demos and tests.
 
@@ -223,12 +236,12 @@ src/vm-server/VM.Server/
     Services/            IChangeCalculator.cs, ChangeResult.cs, BoundedChangeCalculator.cs
     Errors/              DomainException.cs, ErrorCodes.cs
   VM.Server.Service/               # use cases + abstractions. Depends on Domain only.
-    Products/            ProductService.cs, dtos
-    Vending/             VendingService.cs, dtos
-    Abstractions/        IProductStore.cs, ICoinBank.cs, IExternalCatalogSource.cs
+    Products/            ProductService.cs, ProductDto.cs
+    Vending/             VendingService.cs, dtos                       # P4
+    Abstractions/        IVendingMachineStore.cs, IExternalCatalogSource.cs
   VM.Server.Repository/            # implementations: in-memory store, mock external API
-    InMemory/            InMemoryProductStore.cs, InMemoryCoinBank.cs
-    MockExternalApi/     FileExternalCatalogSource.cs, catalog.seed.json
+    InMemory/            InMemoryVendingMachineStore.cs, VendingMachineOptions.cs
+    MockExternalApi/     FileExternalCatalogSource.cs, catalogue.seed.json
   VM.Server.API/                   # Minimal API endpoints, DI, CORS, Swagger
     Endpoints/           ProductEndpoints.cs, VendingEndpoints.cs, ExternalEndpoints.cs
     Middleware/          ExceptionHandlingMiddleware.cs

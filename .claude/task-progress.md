@@ -9,9 +9,10 @@ the same commit as the work it describes. Rules: `CLAUDE.md` §7.
 
 ## Next up
 
-1. `P2-1` … `P2-4` — change calculator
-2. `P3-1` … `P3-6` — product state and CRUD
-3. `P4-1` … `P4-7` — vending use cases
+1. `P2-1` … `P2-4` — change calculator (still open; P4's `Purchase` needs a
+   real `IChangeCalculator`, not just the interface P1-7 declared)
+2. `P4-1` … `P4-7` — vending use cases
+3. `P5-1` … `P5-6` — HTTP API
 
 ## Open questions
 
@@ -55,14 +56,29 @@ below and the decision log. `CoinBundle`/`P1-3` superseded.
 - [ ] `P2-3` Comment documenting why greedy is wrong, with counterexample
 - [ ] `P2-4` Tests incl. the greedy counterexample and the empty-bank case
 
-### P3 — Application layer: products `[ ]`
+### P3 — Service layer: products `[x]`
 
-- [ ] `P3-1` `IProductStore`, `IExternalCatalogSource`
-- [ ] `P3-2` `catalog.seed.json` — 6 products, distinct prices
-- [ ] `P3-3` `FileExternalCatalogSource` (read-only)
-- [ ] `P3-4` `InMemoryProductStore` — thread-safe, lazy seed, `Reload()`
-- [ ] `P3-5` `ProductService` with all validation rules
-- [ ] `P3-6` Tests incl. seed-file-immutability assertion
+Executed on top of the P1-6..P1-8 aggregate, ahead of P2 (change calculator
+not needed for product CRUD). `P3-1`…`P3-6` all done.
+
+- [x] `P3-1` `IVendingMachineStore`, `IExternalCatalogSource` (not
+      `IProductStore`/`ICoinBank` — the `VendingMachine` aggregate replaced
+      both; `CLAUDE.md` §4.1 corrected)
+- [x] `P3-2` `catalogue.seed.json` — 6 products, distinct prices 85-245c, no
+      quantity field
+- [x] `P3-3` `FileExternalCatalogSource` — read-only, `System.Text.Json`
+      camelCase, fails loudly (not silently empty) on a missing/malformed file
+- [x] `P3-4` `InMemoryVendingMachineStore` — `SemaphoreSlim`-guarded
+      once-only lazy load, `VendingMachine:CoinBank` /
+      `VendingMachine:InitialQuantityPerSlot` via `IOptions`, `ReloadAsync()`
+- [x] `P3-5` `ProductService` — CRUD over the aggregate's slots, mapping only;
+      every validation rule delegated to the domain. Added name-uniqueness
+      (case-insensitive) to `VendingMachine` itself per this task's own
+      instruction — the one collection invariant P1 hadn't covered
+- [x] `P3-6` 15 tests: concurrent-first-call-reads-once, CRUD reflected in
+      reads, byte-identical seed file after CRUD (SHA-256 before/after),
+      duplicate name/price, quantity 16, price 3, reload discards edits,
+      delete of an unknown id
 
 ### P4 — Application layer: vending `[ ]`
 
@@ -266,6 +282,24 @@ Format: `YYYY-MM-DD — decision — why — alternatives rejected`
   every product's name for the same reason. Flagged explicitly in case this
   reading of "enforce both" (ids + prices, not names + prices) isn't what was
   intended.
+- `2026-09-16` — **Name uniqueness moved into `VendingMachine` after all**,
+  superseding the P1-reopening entry above that deliberately kept it in
+  `ProductService` — explicit instruction for P3: "add it to the aggregate
+  rather than here, so all collection invariants live in one place." The
+  aggregate's `EnsureSlotInvariants` now checks id, name (case-insensitive)
+  and price together in one pass; `ProductService` does no uniqueness
+  checking of its own, only mapping and `PRODUCT_NOT_FOUND` translation for
+  reads.
+- `2026-09-16` — **`catalogue.seed.json` carries no `quantity` field** — every
+  slot's starting stock instead comes from configuration
+  (`VendingMachine:InitialQuantityPerSlot`), applied uniformly by
+  `VendingMachine.Load`. An external product catalog is a source of *product*
+  data (name, price, image) — it has no way to know this specific machine's
+  physical stock levels, and baking a quantity into it would blur "external
+  catalog" and "this machine's inventory" into one concept — rejected storing
+  quantity in the seed file (the two are genuinely different data: one
+  travels with the product, the other belongs to a specific machine
+  instance and is reset by `Reload`/restart either way).
 
 ---
 
@@ -375,3 +409,21 @@ needs to know.
   log (id+price enforced in the aggregate, name uniqueness deliberately left
   in P3) since the task's own wording was internally ambiguous on this point.
   Updated `CLAUDE.md` §2.3/§2.4/§2.5/§4.1. Does not start P3.
+- `2026-09-16` — P3 (`P3-1`…`P3-6`), Service + Repository + their tests, done
+  ahead of P2: `IVendingMachineStore`/`IExternalCatalogSource` abstractions;
+  `catalogue.seed.json` (6 products, 85-245c, no quantity — see decision
+  log); `FileExternalCatalogSource` (read-only, fails loudly on missing/bad
+  JSON); `InMemoryVendingMachineStore` (single `SemaphoreSlim` guards lazy
+  once-only load *and* every subsequent read/mutation — `AccessAsync`/
+  `ExecuteAsync`/`ReloadAsync`), config-bound via `IOptions<VendingMachineOptions>`;
+  `ProductService` (CRUD as pure mapping/orchestration over the aggregate,
+  zero validation logic of its own). One authorized Domain change: moved
+  name-uniqueness into `VendingMachine.EnsureSlotInvariants` per this task's
+  explicit instruction (supersedes the P1-reopening decision that kept it in
+  Service). 15 new Service.Tests incl. the SHA-256 byte-identical-seed-file
+  proof and a real concurrent-first-call race test; 65 Domain tests
+  unaffected (2 more added for the name-uniqueness change). Solution-wide
+  `dotnet build`/`test` green (81 total: 65 + 15 + 1 API placeholder).
+  Updated `CLAUDE.md` §2.6/§4.1 and README's Design notes/Configuration
+  table. P2 still open — flagged in Next up since P4's `Purchase` needs a
+  real `IChangeCalculator`, not just the interface.
