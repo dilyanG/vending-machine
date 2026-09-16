@@ -9,9 +9,9 @@ the same commit as the work it describes. Rules: `CLAUDE.md` §7.
 
 ## Next up
 
-1. `P4-1` … `P4-7` — vending use cases
-2. `P5-1` … `P5-6` — HTTP API
-3. `P6-2`, `P6-3`, `P6-8` — the frontend pieces still blocked on the P5 contract
+1. `P5-1` … `P5-6` — HTTP API
+2. `P6-2`, `P6-3`, `P6-8` — the frontend pieces still blocked on the P5 contract
+3. `P7-1` … `P7-9` — vending UI
 
 ## Open questions
 
@@ -82,15 +82,42 @@ seed file and a real concurrent-first-call race). `P3-1`…`P3-6` all done,
 executed ahead of P2 (see decision/session log for the store/name-uniqueness
 calls) — see `CLAUDE.md` §2.6/§4.1.
 
-### P4 — Application layer: vending `[ ]`
+### P4 — Service layer: vending `[x]`
 
-- [ ] `P4-1` `ICoinBank` + `InMemoryCoinBank`, float from config
-- [ ] `P4-2` `VendingSession`
-- [ ] `P4-3` `InsertCoin` with denomination validation
-- [ ] `P4-4` `Purchase` with rollback on `CHANGE_UNAVAILABLE`
-- [ ] `P4-5` `Reset` returning identical denominations
-- [ ] `P4-6` Single lock over session + bank + inventory
-- [ ] `P4-7` Tests incl. atomicity proof and `paid == price + change`
+Much smaller than `IMPLEMENTATION_PLAN.md` describes — the P1 aggregate
+refactor already absorbed most of it. See decision log.
+
+- [-] `P4-1` `ICoinBank` + `InMemoryCoinBank`, float from config —
+      **superseded**: the `VendingMachine` aggregate owns its own `Bank`
+      (`CoinInventory`), built in P1-7/P3-4
+- [-] `P4-2` `VendingSession` — **superseded**: the aggregate owns the
+      session (`InsertedCoins`/`InsertedTotalCents`) directly, built in P1-7
+- [x] `P4-3` `VendingService.InsertCoinAsync` — one call to
+      `VendingMachine.InsertCoin`, maps to `SessionDto`
+- [x] `P4-4` `VendingService.PurchaseAsync` — one call to
+      `VendingMachine.Purchase`, maps `PurchaseResult` to `PurchaseResultDto`
+      (no rollback code to write — P1-7's compute-then-commit ordering
+      already made a failed purchase a no-op)
+- [x] `P4-5` `VendingService.ResetAsync` — one call to
+      `VendingMachine.ReturnInsertedCoins`, maps to `ReturnedCoinsDto`
+- [-] `P4-6` Single lock over session + bank + inventory — **superseded**:
+      `InMemoryVendingMachineStore`'s `SemaphoreSlim` (P3-4) already guards
+      every call into the aggregate, mutating or not
+- [-] `P4-7` Tests incl. atomicity proof and `paid == price + change` —
+      **superseded**: both already proven on the aggregate in
+      `VendingMachineTests` (P1-7/P2-5)
+- [x] `P4-8` DI: `ServiceCollectionExtensions.AddVendingMachineBackend` in
+      `VM.Server.Repository` (the first composition-root registration in the
+      solution — P3's scope excluded API/DI entirely, so nothing existed
+      yet to extend; see decision log) registers `IExternalCatalogSource`,
+      `IVendingMachineStore`, `IChangeCalculator` → `BoundedChangeCalculator`,
+      `ProductService` and `VendingService`, all singleton
+- [x] `P4-9` 6 `VendingServiceTests`: consistent `PurchaseAsync` DTO
+      (`paid == price + change`), real `BoundedChangeCalculator` wired in
+      (asserted against the same greedy-counterexample bank as
+      `BoundedChangeCalculatorTests`), `changeCoins`/`returnedCoins` sorted
+      descending, a `DomainException` surfacing with its code intact,
+      `GetDenominationsAsync` ascending, `ResetAsync` round-trip
 
 ### P5 — HTTP API `[ ]`
 
@@ -368,6 +395,34 @@ Format: `YYYY-MM-DD — decision — why — alternatives rejected`
   the larger 50c denomination). Rejected descending order, which would put
   this same tie-break on the *smallest* denomination's decision instead and
   produce the opposite (wrong) preference.
+- `2026-09-18` — **The P1 aggregate refactor shrank P4 to a thin mapping
+  layer**, well below what `IMPLEMENTATION_PLAN.md` originally scoped for it
+  — worth recording explicitly since a reviewer comparing the plan to the
+  code will otherwise wonder what happened to four of its seven tasks.
+  Absorbed: `P4-1` (`ICoinBank`/`InMemoryCoinBank`) — the `VendingMachine`
+  aggregate owns `Bank` directly; `P4-2` (`VendingSession`) — the aggregate
+  owns `InsertedCoins`/`InsertedTotalCents` directly; `P4-6` (a lock over
+  session+bank+inventory) — done once, in `InMemoryVendingMachineStore`'s
+  `SemaphoreSlim` (P3-4), which already guards every call whether P3's
+  `ProductService` or P4's `VendingService` makes it; `P4-7` (atomicity +
+  `paid == price + change` tests) — already proven directly on the
+  aggregate in P1-7/P2-5, where the invariant actually lives. What
+  remained for P4 itself: `VendingService` (`P4-3`/`P4-4`/`P4-5`), each
+  method one aggregate call plus DTO mapping, no business logic; `P4-8` (DI)
+  and `P4-9` (tests for the mapping only) were added since the original plan
+  didn't anticipate a composition root existing yet at this point.
+- `2026-09-18` — **`ServiceCollectionExtensions.AddVendingMachineBackend`
+  lives in `VM.Server.Repository`, not `VM.Server.API`** — this task assumed
+  P3 had already established a composition-root extension method to extend,
+  but P3's scope explicitly excluded API/DI entirely, so nothing existed;
+  this is the first one in the solution. Repository is the only project that
+  can see both Service's interfaces and its own implementations of them
+  (`API → Service → Domain`, `Repository` implements `Service`'s
+  abstractions, per `CLAUDE.md` §4.1), so it can register the whole backend
+  behind one call; P5's `Program.cs` will just invoke it — rejected putting
+  the registrations in API directly, which would need to reference
+  Repository's concrete types anyway and scatters wiring across two
+  projects instead of one.
 
 ---
 
@@ -542,3 +597,23 @@ needs to know.
   range-of-amounts property test. 95 tests total across the solution, all
   green. See decision log for the algorithm-choice and tie-break-correctness
   reasoning. Closes P2.
+- `2026-09-18` — P4, much smaller than planned (see decision log for why):
+  `VendingService` in `Service/Vending` — `GetDenominationsAsync`/
+  `GetSessionAsync`/`InsertCoinAsync`/`PurchaseAsync`/`ResetAsync`, each one
+  `IVendingMachineStore.AccessAsync` call into exactly one `VendingMachine`
+  method plus hand-written DTO mapping (`CoinCountDto`/`SessionDto`/
+  `PurchaseResultDto`/`ReturnedCoinsDto`, matching `CLAUDE.md` §3.2's shapes,
+  coin arrays sorted denomination-descending). Added the solution's first
+  composition-root DI extension
+  (`VM.Server.Repository.ServiceCollectionExtensions.AddVendingMachineBackend`,
+  singleton lifetimes throughout) registering everything P3 and P4 need,
+  including `BoundedChangeCalculator` as `IChangeCalculator` — no new
+  package, `Microsoft.Extensions.DependencyInjection.Abstractions` was
+  already transitively available via `Microsoft.Extensions.Options`. 6 new
+  `VendingServiceTests` (mapping consistency, real-calculator wiring against
+  the same greedy-counterexample bank as `BoundedChangeCalculatorTests`,
+  sort order, `DomainException` passthrough, denominations ascending, reset
+  round-trip) — no business-rule tests duplicated, they're on the aggregate.
+  `VM.Server.Service.csproj` still only references Domain. 101 tests total
+  across the solution (79 Domain + 21 Service + 1 API placeholder), all
+  green. Closes P4. Next: P5 (HTTP API, contract freeze).
