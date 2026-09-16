@@ -9,10 +9,9 @@ the same commit as the work it describes. Rules: `CLAUDE.md` §7.
 
 ## Next up
 
-1. `P2-1` … `P2-4` — change calculator (still open; P4's `Purchase` needs a
-   real `IChangeCalculator`, not just the interface P1-7 declared)
-2. `P4-1` … `P4-7` — vending use cases
-3. `P5-1` … `P5-6` — HTTP API
+1. `P4-1` … `P4-7` — vending use cases
+2. `P5-1` … `P5-6` — HTTP API
+3. `P6-2`, `P6-3`, `P6-8` — the frontend pieces still blocked on the P5 contract
 
 ## Open questions
 
@@ -49,12 +48,31 @@ below and the decision log. `CoinBundle`/`P1-3` superseded.
 - [x] `P1-8` `CoinInventory` mutable entity, replacing `CoinBundle`, used for
       both the bank and the session's inserted coins
 
-### P2 — Change calculation `[ ]`
+### P2 — Change calculation `[x]`
 
-- [ ] `P2-1` `IChangeCalculator` + `ChangeResult`
-- [ ] `P2-2` Bounded coin-change DP, minimal coin count
-- [ ] `P2-3` Comment documenting why greedy is wrong, with counterexample
-- [ ] `P2-4` Tests incl. the greedy counterexample and the empty-bank case
+Executed after P3 (see P3's session log for why) - the interface and result
+type P1-7 declared are now actually implemented.
+
+- [x] `P2-1` `ChangeResult` — `Made`/`NotPossible` factories (renamed from
+      P1-7's `Success`/`Failure` to match this task), `TotalCents` added;
+      `IChangeCalculator`'s signature confirmed unchanged from P1-7
+- [x] `P2-2` `BoundedChangeCalculator` — bounded coin-change DP exactly as
+      specified (denominations ascending, min coins, deterministic
+      larger-denomination tie-break — see decision log for how)
+- [x] `P2-3` Class-level comment with the worked 60c-from-{50:1,20:3}
+      counterexample
+- [x] `P2-4` 13 tests: boundary table (amount 0, exact coin, impossible,
+      empty bank, bank smaller than amount), the named greedy-counterexample
+      test, minimal-coin-count, unaccepted-denomination filtering, purity,
+      determinism, a Stopwatch-measured performance test (500c/200 coins:
+      ~2ms, budget 50ms), and a range-of-amounts property test
+- [x] `P2-5` Wired the real calculator into the `VendingMachine` purchase
+      tests (P1-7), replacing the hand-written fake everywhere except the
+      one `CHANGE_UNAVAILABLE` test, which still needs a fake that always
+      reports impossible to exercise that path deterministically. Added
+      `SpyChangeCalculator` (wraps the real calculator, records the last
+      call's arguments) so the "offers bank + inserted coins to the
+      calculator" test could use real computation too, not just a stub.
 
 ### P3 — Service layer: products `[x]`
 
@@ -325,6 +343,31 @@ Format: `YYYY-MM-DD — decision — why — alternatives rejected`
   with the same live check afterward. Escape-to-close, initial focus
   placement and outside-content containment are still left entirely to the
   browser, since those parts do work natively.
+- `2026-09-17` — **`BoundedChangeCalculator` stays the straightforward
+  O(denominations × amount × count) DP** — six denominations, change under a
+  few hundred cents, counts in the low hundreds — the measured worst case in
+  this repo's own performance test is ~2ms for 500c against 200 coins, four
+  orders of magnitude under the 50ms budget. A logarithmic-time approach
+  (binary/power-of-two splitting the per-denomination counts to shrink the
+  inner loop) would earn its complexity at a much larger scale, but here it
+  would only make the algorithm harder for a reviewer to verify by reading —
+  and correctness-by-inspection is worth more than headroom nobody needs.
+  Rejected switching algorithms pre-emptively for input sizes this domain
+  will never see.
+- `2026-09-17` — **Denominations are fed to the DP in ascending order**, with
+  a tie-break that keeps the *largest* `k` among equally-good candidates at
+  each layer — this is not an arbitrary choice: because ascending order
+  means the largest denomination (200c) is decided *last*, its choice is
+  made with full knowledge of the true optimal cost for every smaller
+  remainder (already computed), so "prefer more of the current denomination
+  on a tie" only ever fires at that point in a way that correctly favours
+  larger denominations globally, not just locally. Verified by hand against
+  a constructed tie (60c from `{20:3, 50:1, 5:2}` with no 10c/100c/200c
+  available — two different 3-coin solutions exist, `{20:3}` and
+  `{50:1,5:2}`; the algorithm returns the latter, which has strictly more of
+  the larger 50c denomination). Rejected descending order, which would put
+  this same tie-break on the *smallest* denomination's decision instead and
+  produce the opposite (wrong) preference.
 
 ---
 
@@ -482,3 +525,20 @@ needs to know.
   a `setTimeout` racing the same browser-internal queued task). Fixed
   `CLAUDE.md` §3.3 and a stale README config row along the way (see decision
   log). P6 now `[~]`; `P6-2`/`P6-3`/`P6-8` remain, blocked on P5.
+- `2026-09-17` — P2 (`P2-1`…`P2-5`), Domain + Domain.Tests only:
+  `BoundedChangeCalculator` (bounded coin-change DP, exact algorithm from the
+  task spec - ascending denominations, deterministic largest-denomination
+  tie-break, no denomination outside `CoinDenominations` ever surfaces even
+  if the input dictionary has one). `ChangeResult`'s factories renamed
+  `Success`/`Failure` → `Made`/`NotPossible` to match this task's P2-1 spec
+  (the only caller was `FakeChangeCalculator`, updated); `IChangeCalculator`
+  unchanged. Wired the real calculator into the P1-7 purchase tests
+  (`Calculate_WhenGreedyWouldStrand_FindsTheCorrectCombination` is the named
+  proof the counterexample works); kept one fake for the deterministic
+  `CHANGE_UNAVAILABLE` path and added `SpyChangeCalculator` so the
+  "offers bank + inserted coins" test could use real computation and still
+  inspect what was passed. 13 new calculator tests incl. a Stopwatch-measured
+  performance test (500c/200 coins in ~2ms, budget 50ms) and a
+  range-of-amounts property test. 95 tests total across the solution, all
+  green. See decision log for the algorithm-choice and tie-break-correctness
+  reasoning. Closes P2.
