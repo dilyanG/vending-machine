@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+  <rect width="200" height="200" fill="#fef3c7"/>
+  <path d="M55 90 h90 v45 a45 45 0 0 1 -45 45 h0 a45 45 0 0 1 -45 -45 Z" fill="#78350f"/>
+  <path d="M145 100 h15 a15 15 0 0 1 0 30 h-15 Z" fill="none" stroke="#78350f" stroke-width="6"/>
+  <path d="M75 75 q5 -15 -5 -25 M100 75 q5 -15 -5 -25 M125 75 q5 -15 -5 -25"
+        fill="none" stroke="#92400e" stroke-width="4" stroke-linecap="round"/>
+  <text x="100" y="180" text-anchor="middle" font-family="sans-serif" font-size="18" fill="#78350f">Espresso</text>
+</svg>
