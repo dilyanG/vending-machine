@@ -5,4 +5,12 @@
     <ProjectReference Include="..\VM.Server.Service\VM.Server.Service.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Options" Version="10.0.12" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="MockExternalApi\catalogue.seed.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>
