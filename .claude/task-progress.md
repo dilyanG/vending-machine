@@ -33,6 +33,21 @@ CLI quirks worked around.
 47 boundary-table unit tests. `P1-1`…`P1-5` all done — see decision/session
 log for the scope-boundary calls (name/price uniqueness live in P3, not here).
 
+**Reopened** before P3 for an aggregate-root restructuring — see `P1-6`…`P1-8`
+below and the decision log. `CoinBundle`/`P1-3` superseded.
+
+- [x] `P1-6` `Slot` entity (product + quantity, `Dispense`/`Restock`);
+      `Quantity` removed from `Product`, which is now pure catalogue data
+- [-] `P1-3` `CoinBundle` immutable value object — **superseded by `P1-8`**:
+      the aggregate root makes rollback (and therefore persistent/immutable
+      coin collections) unnecessary; replaced by mutable `CoinInventory`
+- [x] `P1-7` `VendingMachine` aggregate root: owns slots, bank and session;
+      compute-then-commit `Purchase` (no rollback code); `Reset`; slot CRUD
+      for P3; id-uniqueness/price-distinctness enforced across slots;
+      `IChangeCalculator`/`ChangeResult` declared (not implemented — P2)
+- [x] `P1-8` `CoinInventory` mutable entity, replacing `CoinBundle`, used for
+      both the bank and the session's inserted coins
+
 ### P2 — Change calculation `[ ]`
 
 - [ ] `P2-1` `IChangeCalculator` + `ChangeResult`
@@ -208,6 +223,49 @@ Format: `YYYY-MM-DD — decision — why — alternatives rejected`
   for ("two centralised card-like buttons ... redirected to the module") —
   rejected keeping vending at `/` with the landing page on top of it, which
   would make `/` do two jobs instead of one each.
+- `2026-09-16` — **`VendingMachine` aggregate root replaces the
+  store/bank/session-plus-service-lock design** — one object owns the slots,
+  the coin bank and the current session together, so atomicity falls out of
+  the design (single unit of consistency) instead of being arranged by a lock
+  in the Service layer — rejected keeping three separately-lockable stores
+  coordinated by `VendingService`, which is exactly the shape that made
+  rollback necessary in the first place.
+- `2026-09-16` — **`Purchase` validates everything, *then* mutates — no
+  rollback code, no try/catch** — find the slot, check availability, check
+  funds, and ask the change calculator, all before touching any state; only
+  once the calculator confirms exact change is possible does the aggregate
+  move inserted coins into the bank, remove the change coins, dispense, and
+  clear the session, in that order. A failed purchase is a no-op because
+  nothing happened yet, not because anything was undone — rejected the
+  original P1 plan of mutating optimistically and rolling back on
+  `CHANGE_UNAVAILABLE`, which needs persistent/immutable state (`CoinBundle`)
+  specifically to make rollback cheap and safe.
+- `2026-09-16` — **`CoinBundle` (immutable, `Combine`/`TryRemove`) replaced by
+  `CoinInventory` (mutable, `Add`/`Remove`/`AddAll`)** — the whole reason
+  `CoinBundle` was a persistent immutable structure was to make rollback safe;
+  with the aggregate now validating before mutating, there is nothing to roll
+  back, so a plain mutable entity is simpler and there is no reason to keep
+  both types around. `CoinInventory.Remove` throws `DomainException`
+  (`CHANGE_UNAVAILABLE`) rather than `CoinBundle.Remove`'s
+  `InvalidOperationException`, since its only real call site now is removing
+  confirmed-available change coins from the bank inside `Purchase` — a
+  `DomainException` fits `CHANGE_UNAVAILABLE`'s own §3.3 code, and the
+  ambiguity that justified a plain BCL exception in P1 (which of ten
+  unrelated codes fits an unspecified caller) no longer applies now that
+  there's exactly one caller with a specific meaning.
+- `2026-09-16` — **`VendingMachine` now enforces slot product-id uniqueness
+  and price distinctness itself** (`DUPLICATE_PRODUCT` / `DUPLICATE_PRICE`),
+  superseding the P1 decision that deferred both to `ProductService` — with
+  the aggregate owning the whole slot collection, these are no longer
+  cross-entity rules a single entity can't see. **Name uniqueness
+  (`DUPLICATE_PRODUCT` by name, case-insensitive) is deliberately NOT moved
+  here** — the aggregate has no concept of name identity, only product ids
+  and prices, and adding one only to satisfy this one rule would mean
+  `VendingMachine` doing catalogue-shaped work it doesn't otherwise need;
+  that check stays in `ProductService` (P3), which already has to look at
+  every product's name for the same reason. Flagged explicitly in case this
+  reading of "enforce both" (ids + prices, not names + prices) isn't what was
+  intended.
 
 ---
 
@@ -298,3 +356,22 @@ needs to know.
   horizontal overflow at 320–1440px. A screenshot made the card description
   look off-grey; computed colour checked out as exactly `--text-muted` —
   compression artefact, not a bug. P6 still not closed.
+- `2026-09-16` — Reopened P1 for an aggregate-root restructuring
+  (`P1-6`/`P1-7`/`P1-8`) ahead of P3, Domain/Domain.Tests only: `Slot` entity
+  (quantity moved off `Product`, which is now pure catalogue data);
+  `CoinBundle` deleted, replaced by mutable `CoinInventory`; new
+  `VendingMachine` aggregate root owning slots + bank + session, with a
+  compute-then-commit `Purchase` (validate fully, mutate once, no rollback
+  code) and `IChangeCalculator`/`ChangeResult` declared for P2 to implement.
+  Moved (not duplicated) the quantity-boundary/`DecrementStock`/`SetQuantity`
+  tests from `ProductTests` to new `SlotTests`; wrote `VendingMachineTests`
+  with a hand-written `FakeChangeCalculator` covering Load validation, the
+  full purchase decision tree (happy path, exact money, insufficient funds,
+  out of stock, product not found, change unavailable — each proving slot/
+  bank/session are untouched on failure), reset, and the
+  `paid == price + change` invariant. `VM.Server.Domain.csproj` still zero
+  package/project references. 63 Domain tests, solution-wide `dotnet
+  build`/`test` green (65 total). Flagged one reading call in the decision
+  log (id+price enforced in the aggregate, name uniqueness deliberately left
+  in P3) since the task's own wording was internally ambiguous on this point.
+  Updated `CLAUDE.md` §2.3/§2.4/§2.5/§4.1. Does not start P3.
