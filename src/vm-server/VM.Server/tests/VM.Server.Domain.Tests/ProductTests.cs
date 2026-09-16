@@ -8,26 +8,6 @@ public class ProductTests
 {
     private const string ValidName = "Espresso";
     private const int ValidPriceCents = 145;
-    private const int ValidQuantity = 5;
-
-    [Theory]
-    [InlineData(-1, false)]
-    [InlineData(0, true)]
-    [InlineData(15, true)]
-    [InlineData(16, false)]
-    public void Create_WithQuantityBoundary_AcceptsOrRejects(int quantity, bool shouldSucceed)
-    {
-        var act = () => Product.Create(ValidName, ValidPriceCents, quantity);
-
-        if (shouldSucceed)
-        {
-            act.Should().NotThrow();
-        }
-        else
-        {
-            act.Should().Throw<DomainException>().Which.Code.Should().Be(ErrorCodes.InvalidQuantity);
-        }
-    }
 
     [Theory]
     [InlineData(0, false)]
@@ -37,7 +17,7 @@ public class ProductTests
     [InlineData(145, true)]
     public void Create_WithPriceBoundary_AcceptsOrRejects(int priceCents, bool shouldSucceed)
     {
-        var act = () => Product.Create(ValidName, priceCents, ValidQuantity);
+        var act = () => Product.Create(ValidName, priceCents);
 
         if (shouldSucceed)
         {
@@ -55,7 +35,7 @@ public class ProductTests
     [InlineData("   ")]
     public void Create_WithBlankName_ThrowsInvalidProduct(string? name)
     {
-        var act = () => Product.Create(name!, ValidPriceCents, ValidQuantity);
+        var act = () => Product.Create(name!, ValidPriceCents);
 
         act.Should().Throw<DomainException>().Which.Code.Should().Be(ErrorCodes.InvalidProduct);
     }
@@ -63,35 +43,15 @@ public class ProductTests
     [Fact]
     public void Create_WithSurroundingWhitespaceInName_TrimsName()
     {
-        var product = Product.Create("  Espresso  ", ValidPriceCents, ValidQuantity);
+        var product = Product.Create("  Espresso  ", ValidPriceCents);
 
         product.Name.Should().Be("Espresso");
     }
 
     [Fact]
-    public void DecrementStock_WhenQuantityIsOne_SetsQuantityToZero()
-    {
-        var product = Product.Create(ValidName, ValidPriceCents, 1);
-
-        product.DecrementStock();
-
-        product.Quantity.Should().Be(0);
-    }
-
-    [Fact]
-    public void DecrementStock_WhenQuantityIsZero_ThrowsOutOfStock()
-    {
-        var product = Product.Create(ValidName, ValidPriceCents, 0);
-
-        var act = product.DecrementStock;
-
-        act.Should().Throw<DomainException>().Which.Code.Should().Be(ErrorCodes.OutOfStock);
-    }
-
-    [Fact]
     public void Rename_WithValidName_UpdatesName()
     {
-        var product = Product.Create(ValidName, ValidPriceCents, ValidQuantity);
+        var product = Product.Create(ValidName, ValidPriceCents);
 
         product.Rename("Latte");
 
@@ -101,7 +61,7 @@ public class ProductTests
     [Fact]
     public void Rename_WithBlankName_ThrowsInvalidProductAndLeavesNameUnchanged()
     {
-        var product = Product.Create(ValidName, ValidPriceCents, ValidQuantity);
+        var product = Product.Create(ValidName, ValidPriceCents);
 
         var act = () => product.Rename("   ");
 
@@ -112,7 +72,7 @@ public class ProductTests
     [Fact]
     public void ChangePrice_WithInvalidPrice_ThrowsInvalidPrice()
     {
-        var product = Product.Create(ValidName, ValidPriceCents, ValidQuantity);
+        var product = Product.Create(ValidName, ValidPriceCents);
 
         var act = () => product.ChangePrice(7);
 
@@ -120,21 +80,11 @@ public class ProductTests
     }
 
     [Fact]
-    public void SetQuantity_WithOutOfRangeValue_ThrowsInvalidQuantity()
-    {
-        var product = Product.Create(ValidName, ValidPriceCents, ValidQuantity);
-
-        var act = () => product.SetQuantity(16);
-
-        act.Should().Throw<DomainException>().Which.Code.Should().Be(ErrorCodes.InvalidQuantity);
-    }
-
-    [Fact]
     public void Restore_WithKnownId_KeepsThatId()
     {
         var id = Guid.NewGuid();
 
-        var product = Product.Restore(id, ValidName, ValidPriceCents, ValidQuantity);
+        var product = Product.Restore(id, ValidName, ValidPriceCents);
 
         product.Id.Should().Be(id);
     }

@@ -1,0 +1,104 @@
+:host {
+  display: contents;
+}
+
+.vm-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: var(--touch-target-min);
+  padding-inline: var(--space-4);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  font-family: var(--font-family-base);
+  font-size: var(--font-size-base);
+  font-weight: 600;
+  line-height: var(--line-height-tight);
+  cursor: pointer;
+  transition:
+    background-color var(--transition-fast),
+    border-color var(--transition-fast),
+    opacity var(--transition-fast);
+}
+
+.vm-button--lg {
+  min-height: calc(var(--touch-target-min) + var(--space-2));
+  padding-inline: var(--space-5);
+  font-size: var(--font-size-lg);
+}
+
+.vm-button--full-width {
+  width: 100%;
+}
+
+.vm-button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.vm-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.vm-button--primary {
+  background: var(--accent);
+  color: var(--accent-contrast);
+}
+
+.vm-button--primary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 88%, black);
+}
+
+.vm-button--secondary {
+  background: var(--surface-raised);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+.vm-button--secondary:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.vm-button--ghost {
+  background: transparent;
+  color: var(--text);
+}
+
+.vm-button--ghost:hover:not(:disabled) {
+  background: var(--surface-raised);
+}
+
+.vm-button--danger {
+  background: var(--danger);
+  color: var(--danger-contrast);
+}
+
+.vm-button--danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--danger) 88%, black);
+}
+
+.vm-button--loading {
+  position: relative;
+}
+
+.vm-button--loading .vm-button__label {
+  visibility: hidden;
+}
+
+.vm-button__spinner {
+  position: absolute;
+  width: 1em;
+  height: 1em;
+  border: 2px solid currentcolor;
+  border-right-color: transparent;
+  border-radius: var(--radius-full);
+  animation: vm-button-spin var(--transition-slow) linear infinite;
+}
+
+@keyframes vm-button-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

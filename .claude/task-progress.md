@@ -9,9 +9,10 @@ the same commit as the work it describes. Rules: `CLAUDE.md` §7.
 
 ## Next up
 
-1. `P2-1` … `P2-4` — change calculator
-2. `P3-1` … `P3-6` — product state and CRUD
-3. `P4-1` … `P4-7` — vending use cases
+1. `P2-1` … `P2-4` — change calculator (still open; P4's `Purchase` needs a
+   real `IChangeCalculator`, not just the interface P1-7 declared)
+2. `P4-1` … `P4-7` — vending use cases
+3. `P5-1` … `P5-6` — HTTP API
 
 ## Open questions
 
@@ -33,6 +34,21 @@ CLI quirks worked around.
 47 boundary-table unit tests. `P1-1`…`P1-5` all done — see decision/session
 log for the scope-boundary calls (name/price uniqueness live in P3, not here).
 
+**Reopened** before P3 for an aggregate-root restructuring — see `P1-6`…`P1-8`
+below and the decision log. `CoinBundle`/`P1-3` superseded.
+
+- [x] `P1-6` `Slot` entity (product + quantity, `Dispense`/`Restock`);
+      `Quantity` removed from `Product`, which is now pure catalogue data
+- [-] `P1-3` `CoinBundle` immutable value object — **superseded by `P1-8`**:
+      the aggregate root makes rollback (and therefore persistent/immutable
+      coin collections) unnecessary; replaced by mutable `CoinInventory`
+- [x] `P1-7` `VendingMachine` aggregate root: owns slots, bank and session;
+      compute-then-commit `Purchase` (no rollback code); `Reset`; slot CRUD
+      for P3; id-uniqueness/price-distinctness enforced across slots;
+      `IChangeCalculator`/`ChangeResult` declared (not implemented — P2)
+- [x] `P1-8` `CoinInventory` mutable entity, replacing `CoinBundle`, used for
+      both the bank and the session's inserted coins
+
 ### P2 — Change calculation `[ ]`
 
 - [ ] `P2-1` `IChangeCalculator` + `ChangeResult`
@@ -40,14 +56,13 @@ log for the scope-boundary calls (name/price uniqueness live in P3, not here).
 - [ ] `P2-3` Comment documenting why greedy is wrong, with counterexample
 - [ ] `P2-4` Tests incl. the greedy counterexample and the empty-bank case
 
-### P3 — Application layer: products `[ ]`
+### P3 — Service layer: products `[x]`
 
-- [ ] `P3-1` `IProductStore`, `IExternalCatalogSource`
-- [ ] `P3-2` `catalog.seed.json` — 6 products, distinct prices
-- [ ] `P3-3` `FileExternalCatalogSource` (read-only)
-- [ ] `P3-4` `InMemoryProductStore` — thread-safe, lazy seed, `Reload()`
-- [ ] `P3-5` `ProductService` with all validation rules
-- [ ] `P3-6` Tests incl. seed-file-immutability assertion
+`IVendingMachineStore`/`IExternalCatalogSource`, `FileExternalCatalogSource`,
+`InMemoryVendingMachineStore`, `ProductService`, 15 tests (incl. byte-identical
+seed file and a real concurrent-first-call race). `P3-1`…`P3-6` all done,
+executed ahead of P2 (see decision/session log for the store/name-uniqueness
+calls) — see `CLAUDE.md` §2.6/§4.1.
 
 ### P4 — Application layer: vending `[ ]`
 
@@ -69,22 +84,28 @@ log for the scope-boundary calls (name/price uniqueness live in P3, not here).
 - [ ] `P5-6` `WebApplicationFactory` integration tests covering every route
 - [ ] **Contract frozen** — note the date here once P5 is merged
 
-### P6 — Frontend foundation `[ ]`
+### P6 — Frontend foundation `[~]`
 
-`P6-5`/`P6-6`/`P6-7` pulled forward ahead of `P1`…`P5`: they don't touch the
-API contract (no models, no HTTP calls), so there's no rework risk, and doing
-them now removes three tasks from the critical path once `P5` unblocks the
-rest of `P6`. `P6-1`…`P6-4` and `P6-8` are still blocked on the `P5` contract.
+`P6-5`/`P6-6`/`P6-7` pulled forward ahead of `P1`…`P5` since they don't touch
+the API contract (no models, no HTTP calls). `P6-1`/`P6-4` pulled forward the
+same way — environments and the error interceptor are pure client-side
+plumbing that doesn't need P5 either. `P6-9` (shared UI primitives) is a new
+task, pulled forward from what P7/P8 will need, for the same contract-free
+reason. Only `P6-2`/`P6-3`/`P6-8` remain, and all three are genuinely blocked
+on the `P5` contract (they mirror/call the actual API DTOs).
 
-- [ ] `P6-1` environments + `apiBaseUrl`
+- [x] `P6-1` environments + `apiBaseUrl`
 - [ ] `P6-2` Models mirroring API DTOs
 - [ ] `P6-3` `ProductsApiService`, `VendingApiService`
-- [ ] `P6-4` Error interceptor + `ERROR_MESSAGES`
+- [x] `P6-4` Error interceptor + `ERROR_MESSAGES`
 - [x] `P6-5` `centsToCurrency` pipe
 - [x] `P6-6` `_tokens.scss`, `_mixins.scss`, `_reset.scss`, dark mode
 - [x] `P6-7` App shell + lazy routes `/` and `/products`
 - [ ] `P6-8` Pipe + API service tests (pipe tests already exist from `P6-5`;
       the API-service half is still blocked on `P6-3`)
+- [x] `P6-9` Shared UI primitives (`vm-button`, `vm-badge`, `vm-modal`,
+      `vm-confirm-dialog`, `vm-empty-state`) — pulled forward from P7/P8's
+      dependencies
 
 ### P7 — Vending UI `[ ]`
 
@@ -208,6 +229,102 @@ Format: `YYYY-MM-DD — decision — why — alternatives rejected`
   for ("two centralised card-like buttons ... redirected to the module") —
   rejected keeping vending at `/` with the landing page on top of it, which
   would make `/` do two jobs instead of one each.
+- `2026-09-16` — **`VendingMachine` aggregate root replaces the
+  store/bank/session-plus-service-lock design** — one object owns the slots,
+  the coin bank and the current session together, so atomicity falls out of
+  the design (single unit of consistency) instead of being arranged by a lock
+  in the Service layer — rejected keeping three separately-lockable stores
+  coordinated by `VendingService`, which is exactly the shape that made
+  rollback necessary in the first place.
+- `2026-09-16` — **`Purchase` validates everything, *then* mutates — no
+  rollback code, no try/catch** — find the slot, check availability, check
+  funds, and ask the change calculator, all before touching any state; only
+  once the calculator confirms exact change is possible does the aggregate
+  move inserted coins into the bank, remove the change coins, dispense, and
+  clear the session, in that order. A failed purchase is a no-op because
+  nothing happened yet, not because anything was undone — rejected the
+  original P1 plan of mutating optimistically and rolling back on
+  `CHANGE_UNAVAILABLE`, which needs persistent/immutable state (`CoinBundle`)
+  specifically to make rollback cheap and safe.
+- `2026-09-16` — **`CoinBundle` (immutable, `Combine`/`TryRemove`) replaced by
+  `CoinInventory` (mutable, `Add`/`Remove`/`AddAll`)** — the whole reason
+  `CoinBundle` was a persistent immutable structure was to make rollback safe;
+  with the aggregate now validating before mutating, there is nothing to roll
+  back, so a plain mutable entity is simpler and there is no reason to keep
+  both types around. `CoinInventory.Remove` throws `DomainException`
+  (`CHANGE_UNAVAILABLE`) rather than `CoinBundle.Remove`'s
+  `InvalidOperationException`, since its only real call site now is removing
+  confirmed-available change coins from the bank inside `Purchase` — a
+  `DomainException` fits `CHANGE_UNAVAILABLE`'s own §3.3 code, and the
+  ambiguity that justified a plain BCL exception in P1 (which of ten
+  unrelated codes fits an unspecified caller) no longer applies now that
+  there's exactly one caller with a specific meaning.
+- `2026-09-16` — **`VendingMachine` now enforces slot product-id uniqueness
+  and price distinctness itself** (`DUPLICATE_PRODUCT` / `DUPLICATE_PRICE`),
+  superseding the P1 decision that deferred both to `ProductService` — with
+  the aggregate owning the whole slot collection, these are no longer
+  cross-entity rules a single entity can't see. **Name uniqueness
+  (`DUPLICATE_PRODUCT` by name, case-insensitive) is deliberately NOT moved
+  here** — the aggregate has no concept of name identity, only product ids
+  and prices, and adding one only to satisfy this one rule would mean
+  `VendingMachine` doing catalogue-shaped work it doesn't otherwise need;
+  that check stays in `ProductService` (P3), which already has to look at
+  every product's name for the same reason. Flagged explicitly in case this
+  reading of "enforce both" (ids + prices, not names + prices) isn't what was
+  intended.
+- `2026-09-16` — **Name uniqueness moved into `VendingMachine` after all**,
+  superseding the P1-reopening entry above that deliberately kept it in
+  `ProductService` — explicit instruction for P3: "add it to the aggregate
+  rather than here, so all collection invariants live in one place." The
+  aggregate's `EnsureSlotInvariants` now checks id, name (case-insensitive)
+  and price together in one pass; `ProductService` does no uniqueness
+  checking of its own, only mapping and `PRODUCT_NOT_FOUND` translation for
+  reads.
+- `2026-09-16` — **`catalogue.seed.json` carries no `quantity` field** — every
+  slot's starting stock instead comes from configuration
+  (`VendingMachine:InitialQuantityPerSlot`), applied uniformly by
+  `VendingMachine.Load`. An external product catalog is a source of *product*
+  data (name, price, image) — it has no way to know this specific machine's
+  physical stock levels, and baking a quantity into it would blur "external
+  catalog" and "this machine's inventory" into one concept — rejected storing
+  quantity in the seed file (the two are genuinely different data: one
+  travels with the product, the other belongs to a specific machine
+  instance and is reset by `Reload`/restart either way).
+- `2026-09-16` — **`CLAUDE.md` §3.3's error code list was missing
+  `INVALID_PRODUCT`** (live in `ErrorCodes.cs` and used by `Product`/P3 since
+  the P1 reopening, but never added to the doc) — caught while building the
+  frontend `ErrorCode` union off §3.3 and cross-checking it against the
+  actual backend source rather than trusting the doc alone; added it to both
+  §3.3 and the frontend union. A stale contract doc is worse than a missing
+  one, since it looks authoritative.
+- `2026-09-16` — **`apiBaseUrl` is `''` in both `environment.ts` and
+  `environment.development.ts`**, not just dev — this task said dev must be
+  empty (the proxy handles it), but was silent on production; since nothing
+  in the project defines a separate production deployment topology (frontend
+  and API assumed same-origin), an empty string is the simplest default that
+  works either way — rejected hard-coding `http://localhost:5080` anywhere
+  (explicitly ruled out) and rejected inventing a production URL with
+  nothing to point it at. Also fixed a stale README config row that had
+  claimed the default was `http://localhost:5080`.
+- `2026-09-16` — **`ApiError.message` keeps the server's/transport's raw
+  message; `ERROR_MESSAGES[code]` is the only thing ever shown to a user** —
+  keeps "data" (what actually happened, for logs/devtools) and "presentation"
+  (what CLAUDE.md §5.3 allows on screen) as two separate concerns per the
+  task's own split into two deliverables (an `ApiError` type and a separate
+  `ERROR_MESSAGES` map) — rejected overwriting `message` with the friendly
+  text in the interceptor, which would have thrown away the original server
+  message with nowhere left to log it.
+- `2026-09-16` — **`vm-modal` adds its own Tab-wrap focus trap** rather than
+  relying solely on native `<dialog>`/`showModal()` — verified live (real
+  keyboard input via a scripted Chrome session, not synthetic DOM events,
+  since focus-navigation isn't scriptable that way) that Chrome's native
+  modal containment stops focus from reaching background content but does
+  **not** wrap it: tabbing off the last focusable element inside the dialog
+  landed on `<body>` instead of cycling back to the first element. Added an
+  explicit `(keydown.Tab)` handler that wraps at both ends — confirmed fixed
+  with the same live check afterward. Escape-to-close, initial focus
+  placement and outside-content containment are still left entirely to the
+  browser, since those parts do work natively.
 
 ---
 
@@ -298,3 +415,70 @@ needs to know.
   horizontal overflow at 320–1440px. A screenshot made the card description
   look off-grey; computed colour checked out as exactly `--text-muted` —
   compression artefact, not a bug. P6 still not closed.
+- `2026-09-16` — Reopened P1 for an aggregate-root restructuring
+  (`P1-6`/`P1-7`/`P1-8`) ahead of P3, Domain/Domain.Tests only: `Slot` entity
+  (quantity moved off `Product`, which is now pure catalogue data);
+  `CoinBundle` deleted, replaced by mutable `CoinInventory`; new
+  `VendingMachine` aggregate root owning slots + bank + session, with a
+  compute-then-commit `Purchase` (validate fully, mutate once, no rollback
+  code) and `IChangeCalculator`/`ChangeResult` declared for P2 to implement.
+  Moved (not duplicated) the quantity-boundary/`DecrementStock`/`SetQuantity`
+  tests from `ProductTests` to new `SlotTests`; wrote `VendingMachineTests`
+  with a hand-written `FakeChangeCalculator` covering Load validation, the
+  full purchase decision tree (happy path, exact money, insufficient funds,
+  out of stock, product not found, change unavailable — each proving slot/
+  bank/session are untouched on failure), reset, and the
+  `paid == price + change` invariant. `VM.Server.Domain.csproj` still zero
+  package/project references. 63 Domain tests, solution-wide `dotnet
+  build`/`test` green (65 total). Flagged one reading call in the decision
+  log (id+price enforced in the aggregate, name uniqueness deliberately left
+  in P3) since the task's own wording was internally ambiguous on this point.
+  Updated `CLAUDE.md` §2.3/§2.4/§2.5/§4.1. Does not start P3.
+- `2026-09-16` — P3 (`P3-1`…`P3-6`), Service + Repository + their tests, done
+  ahead of P2: `IVendingMachineStore`/`IExternalCatalogSource` abstractions;
+  `catalogue.seed.json` (6 products, 85-245c, no quantity — see decision
+  log); `FileExternalCatalogSource` (read-only, fails loudly on missing/bad
+  JSON); `InMemoryVendingMachineStore` (single `SemaphoreSlim` guards lazy
+  once-only load *and* every subsequent read/mutation — `AccessAsync`/
+  `ExecuteAsync`/`ReloadAsync`), config-bound via `IOptions<VendingMachineOptions>`;
+  `ProductService` (CRUD as pure mapping/orchestration over the aggregate,
+  zero validation logic of its own). One authorized Domain change: moved
+  name-uniqueness into `VendingMachine.EnsureSlotInvariants` per this task's
+  explicit instruction (supersedes the P1-reopening decision that kept it in
+  Service). 15 new Service.Tests incl. the SHA-256 byte-identical-seed-file
+  proof and a real concurrent-first-call race test; 65 Domain tests
+  unaffected (2 more added for the name-uniqueness change). Solution-wide
+  `dotnet build`/`test` green (81 total: 65 + 15 + 1 API placeholder).
+  Updated `CLAUDE.md` §2.6/§4.1 and README's Design notes/Configuration
+  table. P2 still open — flagged in Next up since P4's `Purchase` needs a
+  real `IChangeCalculator`, not just the interface.
+- `2026-09-16` — P6-1/P6-4/P6-9, pulled forward (contract-free, see the P6
+  heading note): `environment.ts`/`environment.development.ts`
+  (`apiBaseUrl: ''` both, wired via `angular.json`'s `development`
+  `fileReplacements`); `core/api/api-error.ts` (`ErrorCode` — all ten §3.3
+  codes, caught and fixed one missing from the doc, `INVALID_PRODUCT` — plus
+  client-only `NETWORK_ERROR`/`UNKNOWN_ERROR`) and `error-messages.ts`
+  (`ERROR_MESSAGES satisfies Record<ErrorCode, string>`, vending-machine
+  voice, `getErrorMessage()` fallback); `error.interceptor.ts` distinguishing
+  a well-formed §3.3 body, an unrecognised one, and `status === 0`, wired
+  into `app.config.ts` via `provideHttpClient(withFetch(),
+  withInterceptors(...))`. Five `shared/ui/` primitives (`vm-button`,
+  `vm-badge`, `vm-modal`, `vm-confirm-dialog`, `vm-empty-state`), each
+  standalone/OnPush/`input()`/`output()`, styled only from P6-6 tokens (grepped
+  `shared/ui/` for hex/`rgb()`/`@media` — zero hits; the only literal `px`
+  values left are 1-2px border/outline widths, which aren't spacing-scale
+  values). `vm-modal` wraps a native `<dialog>` — added `--danger-contrast`,
+  `--overlay-color`, `--touch-target-min`, `--measure-max-width` tokens it
+  needed. Found (live, see decision log) that native `showModal()` doesn't
+  wrap Tab at the dialog's boundaries, so added an explicit trap; re-verified
+  live afterward that it does now, that Escape still closes both `vm-modal`
+  and `vm-confirm-dialog` and returns focus to the trigger, and that all five
+  primitives render correctly in light and dark (screenshots at both, plus
+  the two dialogs open). Verification used a temporary showcase wired into
+  `home-page`/`puppeteer-core` (`--no-save`), both fully reverted before
+  committing — confirmed `git status`/`home-page`'s bundle size are back to
+  their pre-showcase state. `lint`/`build`/`test:ci` green (45/45; two modal
+  tests were flaky until rewritten to await the real `close` event instead of
+  a `setTimeout` racing the same browser-internal queued task). Fixed
+  `CLAUDE.md` §3.3 and a stale README config row along the way (see decision
+  log). P6 now `[~]`; `P6-2`/`P6-3`/`P6-8` remain, blocked on P5.

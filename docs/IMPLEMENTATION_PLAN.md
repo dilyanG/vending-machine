@@ -195,8 +195,13 @@ rendered yet beyond a shell.
 - `P6-6` `styles/_tokens.scss` (colour, spacing, radius, type scale, breakpoints), `_mixins.scss` (`respond-to`), `_reset.scss`. Light + dark via `prefers-color-scheme`.
 - `P6-7` App shell: header, router outlet, a `/` landing page with two cards, and lazily loaded `/vending` and `/products` (admin) feature route groups.
 - `P6-8` Tests for the pipe and both API services (`HttpTestingController`).
+- `P6-9` Shared UI primitives in `shared/ui/`: `vm-button`, `vm-badge`,
+  `vm-modal`, `vm-confirm-dialog`, `vm-empty-state`. Presentational only —
+  no API calls, no stores, no router. Pulled forward from P7/P8's
+  dependencies (both `vending-page` and `products-page` need these) since
+  they're contract-independent, same reasoning as P6-5/P6-6/P6-7.
 
-**Deliverables:** `core/`, `styles/`, routing, shell.
+**Deliverables:** `core/`, `styles/`, `shared/ui/`, routing, shell.
 
 **Acceptance criteria**
 

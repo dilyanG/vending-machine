@@ -1,0 +1,26 @@
+<!--
+  eslint-disable-next-line @angular-eslint/template/interactive-supports-focus --
+  this click only detects a click on the backdrop itself (event.target check in
+  onBackdropClick); the dialog itself doesn't need to be a tab stop for that.
+-->
+<dialog
+  #dialog
+  class="vm-modal"
+  [attr.aria-labelledby]="headerId"
+  (click)="onBackdropClick($event)"
+  (close)="onDialogClose()"
+  (keydown)="onKeydown($event)"
+>
+  <div class="vm-modal__panel">
+    <div class="vm-modal__header" [id]="headerId">
+      <ng-content select="[modal-header]" />
+      <button type="button" class="vm-modal__close" aria-label="Close" (click)="requestClose()">
+        <span aria-hidden="true">&times;</span>
+      </button>
+    </div>
+    <div class="vm-modal__body">
+      <ng-content select="[modal-body]" />
+    </div>
+    <div class="vm-modal__footer"><ng-content select="[modal-footer]" /></div>
+  </div>
+</dialog>

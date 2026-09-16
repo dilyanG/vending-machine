@@ -76,13 +76,21 @@ but never decides).
 
 ### 2.3 Inventory
 
-- `Quantity` is an `int` in `[0, 15]` inclusive. `15` is `MaxQuantityPerProduct`.
-- Creating or updating a product with quantity outside that range →
+- Quantity belongs to the **slot**, not the product: a slot is one column of
+  the machine, pairing a `Product` with how many units of it the machine
+  currently holds. `Quantity` is an `int` in `[0, 15]` inclusive; `15` is
+  `MaxQuantityPerProduct`. `Product` itself is pure catalogue data (`Id`,
+  `Name`, `PriceCents`, `ImageUrl`) with no quantity of its own.
+- Creating or restocking a slot with quantity outside that range →
   `INVALID_QUANTITY`.
-- Buying a product with `Quantity == 0` → `OUT_OF_STOCK`.
-- Product **names must be unique** (case-insensitive) — `DUPLICATE_PRODUCT`.
-- **Prices must be distinct across product types** (an explicit requirement).
-  Violation → `DUPLICATE_PRICE`.
+- Buying from a slot with `Quantity == 0` → `OUT_OF_STOCK`.
+- **Every slot's product id must be unique, and prices must be distinct across
+  slots** (an explicit requirement) — both enforced by the `VendingMachine`
+  aggregate itself, since it owns the whole collection of slots. Violation →
+  `DUPLICATE_PRODUCT` (id) / `DUPLICATE_PRICE`.
+- Product **names must also be unique** (case-insensitive) — `DUPLICATE_PRODUCT`
+  — enforced by `ProductService` in the Service layer (P3), which can see the
+  whole catalogue by name; the aggregate does not track name identity.
 - `priceCents` must be > 0 and a multiple of 5 (no price can be unmakeable from
   the accepted denominations).
 
@@ -97,31 +105,58 @@ but never decides).
   dispensed, the inserted coins are returned in full, and the API returns
   `CHANGE_UNAVAILABLE`.
 - The machine never over- or under-pays. `inserted == price + change` always.
-- A successful purchase moves the inserted coins into the bank *before*
-  computing change (a customer's own coins are usable as change).
+- Change is computed against the bank **plus** the customer's own inserted
+  coins (a snapshot merge, not a mutation) — so the customer's coins are
+  usable as change without actually moving anywhere until the purchase is
+  confirmed. Only once the calculator confirms exact change is possible does
+  the purchase commit: the inserted coins move into the bank, the change
+  coins leave it, the slot decrements, and the session clears — see §2.5.
 
 ### 2.5 Vending session
 
-- One implicit session (single-user machine). It holds: inserted coins by
-  denomination, and the running `insertedTotalCents`.
-- `insert` → adds one coin of the given denomination.
-- `purchase` → requires `insertedTotalCents >= priceCents`, else
-  `INSUFFICIENT_FUNDS`. On success: decrement quantity, return change, clear
-  session.
-- `reset` → returns the exact coins inserted (same denominations, not
+- The `VendingMachine` aggregate root owns **all** vending state together:
+  the slots, the coin bank, and the current session's inserted coins. There is
+  one implicit session (single-user machine): inserted coins by denomination,
+  and the running `InsertedTotalCents`.
+- `InsertCoin` → adds one coin of the given denomination to the session.
+- `Purchase` → requires `InsertedTotalCents >= priceCents`, else
+  `INSUFFICIENT_FUNDS`; requires the change calculator to be able to make
+  exact change from the bank plus the inserted coins, else
+  `CHANGE_UNAVAILABLE`. Every check happens *before* anything is mutated —
+  the slot is decremented, the inserted coins move into the bank, the change
+  coins leave it, and the session clears, all in one final step once every
+  check has passed. Because the aggregate validates everything before
+  mutating anything, a failed purchase is a no-op by construction — there is
+  no rollback code anywhere.
+- `Reset` → returns the exact coins inserted (same denominations, not
   equivalent value) and clears the session. Reset **never** touches the bank or
-  inventory.
-- Every vending operation is **atomic**. A failed purchase leaves inventory,
-  bank and session exactly as they were.
+  slots.
+- Every vending operation is **atomic** because the aggregate is the single
+  unit of consistency for all three pieces of state — there is no
+  cross-store coordination (and no lock) needed from the Service layer above
+  it.
 
 ### 2.6 Seeding from the "external resource"
 
-- `src/vm-server/VM.Server/VM.Server.Repository/MockExternalApi/catalog.seed.json`
-  is the mock external resource.
+- `src/vm-server/VM.Server/VM.Server.Repository/MockExternalApi/catalogue.seed.json`
+  is the mock external resource — six products (`id`, `name`, `priceCents`,
+  `imageUrl`). It carries **no quantity**: an external product catalogue
+  wouldn't know this machine's stock levels, so every slot's starting quantity
+  comes from configuration (`VendingMachine:InitialQuantityPerSlot`) instead,
+  applied uniformly to every product when the machine loads.
+- `FileExternalCatalogSource` (`IExternalCatalogSource`) reads that file
+  read-only via `System.Text.Json`; it never writes and never caches to disk,
+  and fails loudly — not with a silent empty catalogue — if the file is
+  missing or malformed.
 - It is exposed read-only at `GET /api/external/catalog` so a reviewer can see
   it is genuinely a separate source.
-- The in-memory store loads from it **once**, lazily, on first access.
-- CRUD mutates the in-memory store **only**. The seed file is never written.
+- `InMemoryVendingMachineStore` (`IVendingMachineStore`) holds the single
+  `VendingMachine` aggregate for the app's lifetime. It loads from the
+  external source **once**, lazily, on first access — `SemaphoreSlim`-guarded
+  so concurrent first requests can't seed it twice — and the same guard
+  serialises every subsequent read or mutation into the aggregate.
+- CRUD mutates the in-memory aggregate **only**. The seed file is never
+  written.
 - `POST /api/products/reload` re-seeds from the external resource (discarding
   in-memory changes) — useful for demos and tests.
 
@@ -179,7 +214,7 @@ in §3.3.
 
 Error codes: `INVALID_DENOMINATION`, `INSUFFICIENT_FUNDS`, `OUT_OF_STOCK`,
 `CHANGE_UNAVAILABLE`, `PRODUCT_NOT_FOUND`, `INVALID_QUANTITY`, `INVALID_PRICE`,
-`DUPLICATE_PRODUCT`, `DUPLICATE_PRICE`.
+`INVALID_PRODUCT`, `DUPLICATE_PRODUCT`, `DUPLICATE_PRICE`.
 
 HTTP mapping: `400` validation/business rule, `404` not found, `409` conflict
 (duplicates), `422` `CHANGE_UNAVAILABLE`, `500` unexpected.
@@ -194,19 +229,19 @@ HTTP mapping: `400` validation/business rule, `404` not found, `409` conflict
 src/vm-server/VM.Server/
   VM.Server.slnx
   Directory.Build.props
-  VM.Server.Domain/                # entities, value objects, rules. No deps.
-    Entities/            Product.cs
-    ValueObjects/        Coin.cs, Money.cs, CoinBundle.cs
+  VM.Server.Domain/                # entities, rules. No deps.
+    Entities/            Product.cs, Slot.cs, CoinInventory.cs,
+                         VendingMachine.cs (aggregate root), PurchaseResult.cs
     CoinDenominations.cs
-    Services/            IChangeCalculator.cs, BoundedChangeCalculator.cs
-    Errors/              DomainError.cs, ErrorCodes.cs
+    Services/            IChangeCalculator.cs, ChangeResult.cs, BoundedChangeCalculator.cs
+    Errors/              DomainException.cs, ErrorCodes.cs
   VM.Server.Service/               # use cases + abstractions. Depends on Domain only.
-    Products/            ProductService.cs, dtos
-    Vending/             VendingService.cs, dtos
-    Abstractions/        IProductStore.cs, ICoinBank.cs, IExternalCatalogSource.cs
+    Products/            ProductService.cs, ProductDto.cs
+    Vending/             VendingService.cs, dtos                       # P4
+    Abstractions/        IVendingMachineStore.cs, IExternalCatalogSource.cs
   VM.Server.Repository/            # implementations: in-memory store, mock external API
-    InMemory/            InMemoryProductStore.cs, InMemoryCoinBank.cs
-    MockExternalApi/     FileExternalCatalogSource.cs, catalog.seed.json
+    InMemory/            InMemoryVendingMachineStore.cs, VendingMachineOptions.cs
+    MockExternalApi/     FileExternalCatalogSource.cs, catalogue.seed.json
   VM.Server.API/                   # Minimal API endpoints, DI, CORS, Swagger
     Endpoints/           ProductEndpoints.cs, VendingEndpoints.cs, ExternalEndpoints.cs
     Middleware/          ExceptionHandlingMiddleware.cs

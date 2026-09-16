@@ -1,0 +1,38 @@
+[
+  {
+    "id": "ee6c6e26-5faf-4144-b0d2-c94aaff69687",
+    "name": "Water",
+    "priceCents": 85,
+    "imageUrl": "assets/products/water.svg"
+  },
+  {
+    "id": "132bc124-798d-4123-b5ce-9bba8f9d38f4",
+    "name": "Espresso",
+    "priceCents": 120,
+    "imageUrl": "assets/products/espresso.svg"
+  },
+  {
+    "id": "96a0e81f-bdf5-4a6d-b1db-36fb755f0491",
+    "name": "Cola",
+    "priceCents": 145,
+    "imageUrl": "assets/products/cola.svg"
+  },
+  {
+    "id": "b2025e07-823a-458c-85b8-3ced5f2059fe",
+    "name": "Chips",
+    "priceCents": 175,
+    "imageUrl": "assets/products/chips.svg"
+  },
+  {
+    "id": "8c4ac207-b17a-4bf8-9a74-eabd9cb7c6ea",
+    "name": "Chocolate Bar",
+    "priceCents": 210,
+    "imageUrl": "assets/products/chocolate-bar.svg"
+  },
+  {
+    "id": "80d46cd0-1449-4773-b49c-c08c9f510db5",
+    "name": "Energy Drink",
+    "priceCents": 245,
+    "imageUrl": "assets/products/energy-drink.svg"
+  }
+]

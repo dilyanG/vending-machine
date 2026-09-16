@@ -103,9 +103,12 @@ npm run test:ci                  # single headless run
 
 **Products come from an external resource.** A mock external catalog lives in
 the backend at
-`src/vm-server/VM.Server/VM.Server.Repository/MockExternalApi/catalog.seed.json`
-and is exposed read-only at `GET /api/external/catalog`. On first request the
-application loads that catalog into an in-memory store.
+`src/vm-server/VM.Server/VM.Server.Repository/MockExternalApi/catalogue.seed.json`
+and is exposed read-only at `GET /api/external/catalog`. It carries only each
+product's name, price and image — no stock levels, since an external catalog
+wouldn't know this machine's inventory. On first request the application loads
+it into the vending machine, giving every product the same starting quantity
+from configuration (see below).
 
 **CRUD affects application state only.** Creating, updating or deleting a
 product changes the in-memory store; the external catalog is never written to.
@@ -142,7 +145,8 @@ back exactly the coins you put in without buying anything.
 - **Atomic purchases.** A purchase either fully succeeds or leaves inventory,
   the coin bank and the session untouched.
 - **Max 15 units per product type**, and every product type has a distinct
-  price, per the requirements.
+  price, per the requirements. Starting stock is uniform across products and
+  comes from configuration, not the external catalog (see below).
 - **Mobile-first responsive layout**, tested from 360px upwards; the product
   grid reflows from one to four columns and the coin panel docks to the bottom
   on small screens.
@@ -157,6 +161,7 @@ back exactly the coins you put in without buying anything.
 | --- | --- | --- |
 | Backend port | `src/vm-server/VM.Server/VM.Server.API/Properties/launchSettings.json` | `5080` |
 | Allowed CORS origin | `src/vm-server/VM.Server/VM.Server.API/appsettings.Development.json` → `Cors:AllowedOrigins` | `http://localhost:4200` |
-| API base URL | `src/vm-client/src/environments/environment.ts` | `http://localhost:5080` |
-| Initial coin bank | `appsettings.json` → `CoinBank` | see file |
-| Seed products | `.../VM.Server.Repository/MockExternalApi/catalog.seed.json` | 6 products |
+| API base URL | `src/vm-client/src/environments/environment*.ts` | `''` (relative `/api`; the dev proxy forwards it to `:5080`) |
+| Initial coin bank | `appsettings.json` → `VendingMachine:CoinBank` | see file |
+| Initial quantity per product | `appsettings.json` → `VendingMachine:InitialQuantityPerSlot` | `10` |
+| Seed products | `.../VM.Server.Repository/MockExternalApi/catalogue.seed.json` | 6 products, no quantity |
