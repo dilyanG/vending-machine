@@ -1,6 +1,6 @@
-using VM.Server.Domain.Services;
+using VM.Server.Service.Vending;
 
-namespace VM.Server.Domain.Tests;
+namespace VM.Server.Service.Tests;
 
 internal sealed class FakeChangeCalculator : IChangeCalculator
 {

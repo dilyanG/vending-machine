@@ -1,4 +1,4 @@
-namespace VM.Server.Domain.Services;
+namespace VM.Server.Service.Vending;
 
 public sealed record ChangeResult
 {

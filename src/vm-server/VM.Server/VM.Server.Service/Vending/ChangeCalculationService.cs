@@ -1,4 +1,6 @@
-namespace VM.Server.Domain.Services;
+using VM.Server.Domain;
+
+namespace VM.Server.Service.Vending;
 
 /// <summary>
 /// Bounded coin-change by dynamic programming: the bank holds a limited count
@@ -11,7 +13,7 @@ namespace VM.Server.Domain.Services;
 /// Greedy is only optimal for these denominations given an unlimited supply
 /// of each; a real machine's bank is finite, so it must search instead.
 /// </summary>
-public sealed class BoundedChangeCalculator : IChangeCalculator
+public sealed class ChangeCalculationService : IChangeCalculator
 {
     private const int Unreachable = int.MaxValue;
 

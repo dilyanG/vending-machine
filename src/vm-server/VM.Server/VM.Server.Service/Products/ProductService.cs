@@ -4,11 +4,11 @@ using VM.Server.Service.Abstractions;
 
 namespace VM.Server.Service.Products;
 
-public sealed class ProductService(IVendingMachineStore store)
+public sealed class ProductService(IVendingMachineStore store, ProductValidationService validation)
 {
     public Task<IReadOnlyList<ProductDto>> ListAsync(CancellationToken cancellationToken = default) =>
         store.AccessAsync(
-            machine => (IReadOnlyList<ProductDto>)machine.Slots.Select(ToDto).ToList(),
+            machine => (IReadOnlyList<ProductDto>)machine.Slots.Values.Select(ToDto).ToList(),
             cancellationToken);
 
     public Task<ProductDto> GetAsync(Guid id, CancellationToken cancellationToken = default) =>
@@ -19,9 +19,16 @@ public sealed class ProductService(IVendingMachineStore store)
         store.AccessAsync(
             machine =>
             {
-                var product = Product.Create(name, priceCents, imageUrl);
-                machine.AddSlot(product, quantity);
-                return ToDto(machine.FindSlot(product.Id)!);
+                var validatedName = validation.ValidateName(name);
+                validation.ValidatePrice(priceCents);
+
+                var product = new Product { Id = Guid.NewGuid(), Name = validatedName, PriceCents = priceCents, ImageUrl = imageUrl };
+                validation.EnsureUnique(machine.Slots.Values, product.Id, product.Name, product.PriceCents, excludingProductId: null);
+                validation.ValidateQuantity(quantity);
+
+                var slot = new Slot { Product = product, Quantity = quantity };
+                machine.Slots[product.Id] = slot;
+                return ToDto(slot);
             },
             cancellationToken);
 
@@ -30,19 +37,40 @@ public sealed class ProductService(IVendingMachineStore store)
         store.AccessAsync(
             machine =>
             {
-                var updatedProduct = Product.Restore(id, name, priceCents, imageUrl);
-                machine.UpdateSlot(id, updatedProduct, quantity);
-                return ToDto(machine.FindSlot(id)!);
+                var validatedName = validation.ValidateName(name);
+                validation.ValidatePrice(priceCents);
+
+                if (!machine.Slots.ContainsKey(id))
+                {
+                    throw new DomainException(ErrorCodes.ProductNotFound, $"No product with id '{id}' exists.");
+                }
+
+                validation.EnsureUnique(machine.Slots.Values, id, validatedName, priceCents, excludingProductId: id);
+                validation.ValidateQuantity(quantity);
+
+                var updatedProduct = new Product { Id = id, Name = validatedName, PriceCents = priceCents, ImageUrl = imageUrl };
+                var slot = new Slot { Product = updatedProduct, Quantity = quantity };
+                machine.Slots[id] = slot;
+                return ToDto(slot);
             },
             cancellationToken);
 
     public Task DeleteAsync(Guid id, CancellationToken cancellationToken = default) =>
-        store.ExecuteAsync(machine => machine.RemoveSlot(id), cancellationToken);
+        store.ExecuteAsync(
+            machine =>
+            {
+                if (!machine.Slots.Remove(id))
+                {
+                    throw new DomainException(ErrorCodes.ProductNotFound, $"No product with id '{id}' exists.");
+                }
+            },
+            cancellationToken);
 
     public Task ReloadAsync(CancellationToken cancellationToken = default) => store.ReloadAsync(cancellationToken);
 
     private static Slot FindSlotOrThrow(VendingMachine machine, Guid id) =>
-        machine.FindSlot(id) ?? throw new DomainException(ErrorCodes.ProductNotFound, $"No product with id '{id}' exists.");
+        machine.Slots.GetValueOrDefault(id)
+            ?? throw new DomainException(ErrorCodes.ProductNotFound, $"No product with id '{id}' exists.");
 
     private static ProductDto ToDto(Slot slot) =>
         new(slot.Product.Id, slot.Product.Name, slot.Product.PriceCents, slot.Quantity, slot.Product.ImageUrl);

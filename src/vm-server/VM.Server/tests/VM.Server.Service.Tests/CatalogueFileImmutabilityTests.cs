@@ -4,6 +4,7 @@ using Microsoft.Extensions.Options;
 using VM.Server.Repository.InMemory;
 using VM.Server.Repository.MockExternalApi;
 using VM.Server.Service.Products;
+using VM.Server.Service.State;
 
 namespace VM.Server.Service.Tests;
 
@@ -19,9 +20,11 @@ public class CatalogueFileImmutabilityTests
         var hashBefore = await HashFileAsync(SeedFilePath);
 
         var catalogSource = new FileExternalCatalogSource(SeedFilePath);
+        var validation = new ProductValidationService();
+        var machineState = new MachineStateService(catalogSource, validation);
         var store = new InMemoryVendingMachineStore(
-            catalogSource, Options.Create(new VendingMachineOptions { InitialQuantityPerSlot = 10 }));
-        var service = new ProductService(store);
+            machineState, Options.Create(new VendingMachineOptions { InitialQuantityPerSlot = 10 }));
+        var service = new ProductService(store, validation);
 
         var original = await service.ListAsync();
         original.Should().HaveCount(6);
