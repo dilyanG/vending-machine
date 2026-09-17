@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+  <rect width="200" height="200" fill="#e0f2fe"/>
+  <path d="M100 40 C70 90 60 110 60 130 a40 40 0 0 0 80 0 C140 110 130 90 100 40 Z"
+        fill="#38bdf8" stroke="#0284c7" stroke-width="4"/>
+  <text x="100" y="180" text-anchor="middle" font-family="sans-serif" font-size="20" fill="#0c4a6e">Water</text>
+</svg>

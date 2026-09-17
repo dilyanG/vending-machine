@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+  <rect width="200" height="200" fill="#fef9c3"/>
+  <path d="M65 40 h70 l10 15 v110 a8 8 0 0 1 -8 8 h-84 a8 8 0 0 1 -8 -8 v-110 Z"
+        fill="#f59e0b" stroke="#b45309" stroke-width="4"/>
+  <path d="M65 40 h70 l10 15 h-90 Z" fill="#fbbf24"/>
+  <text x="100" y="120" text-anchor="middle" font-family="sans-serif" font-size="18" fill="#78350f">Chips</text>
+</svg>

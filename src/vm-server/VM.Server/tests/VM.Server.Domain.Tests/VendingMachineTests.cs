@@ -1,6 +1,7 @@
 using FluentAssertions;
 using VM.Server.Domain.Entities;
 using VM.Server.Domain.Errors;
+using VM.Server.Domain.Services;
 
 namespace VM.Server.Domain.Tests;
 
@@ -76,9 +77,8 @@ public class VendingMachineTests
     {
         var machine = LoadSingleProductMachine(145, 5, new Dictionary<int, int> { [50] = 2, [5] = 2 }, out var product);
         machine.InsertCoin(200);
-        var calculator = FakeChangeCalculator.AlwaysSucceedsWith(new Dictionary<int, int> { [50] = 1, [5] = 1 });
 
-        var result = machine.Purchase(product.Id, calculator);
+        var result = machine.Purchase(product.Id, new BoundedChangeCalculator());
 
         result.Slot.Quantity.Should().Be(4);
         result.PaidCents.Should().Be(200);
@@ -97,9 +97,8 @@ public class VendingMachineTests
         machine.InsertCoin(20);
         machine.InsertCoin(20);
         machine.InsertCoin(5);
-        var calculator = FakeChangeCalculator.AlwaysSucceedsWith(new Dictionary<int, int>());
 
-        var result = machine.Purchase(product.Id, calculator);
+        var result = machine.Purchase(product.Id, new BoundedChangeCalculator());
 
         result.ChangeCoins.Should().BeEmpty();
         result.ChangeCents.Should().Be(0);
@@ -113,9 +112,8 @@ public class VendingMachineTests
         var machine = LoadSingleProductMachine(200, 5, new Dictionary<int, int>(), out var product);
         machine.InsertCoin(200);
         machine.InsertCoin(50);
-        var calculator = FakeChangeCalculator.AlwaysSucceedsWith(new Dictionary<int, int> { [50] = 1 });
 
-        var result = machine.Purchase(product.Id, calculator);
+        var result = machine.Purchase(product.Id, new BoundedChangeCalculator());
 
         result.ChangeCents.Should().Be(50);
         machine.Bank.ToSnapshot().Should().BeEquivalentTo(new Dictionary<int, int> { [200] = 1 });
@@ -126,7 +124,7 @@ public class VendingMachineTests
     {
         var machine = LoadSingleProductMachine(145, 5, new Dictionary<int, int> { [50] = 3, [5] = 2 }, out var product);
         machine.InsertCoin(200);
-        var calculator = FakeChangeCalculator.AlwaysSucceedsWith(new Dictionary<int, int> { [50] = 1, [5] = 1 });
+        var calculator = new SpyChangeCalculator(new BoundedChangeCalculator());
 
         machine.Purchase(product.Id, calculator);
 
@@ -143,7 +141,7 @@ public class VendingMachineTests
         var insertedBefore = machine.InsertedCoins.ToSnapshot();
         var quantityBefore = machine.FindSlot(product.Id)!.Quantity;
 
-        var act = () => machine.Purchase(Guid.NewGuid(), FakeChangeCalculator.AlwaysFails());
+        var act = () => machine.Purchase(Guid.NewGuid(), new BoundedChangeCalculator());
 
         act.Should().Throw<DomainException>().Which.Code.Should().Be(ErrorCodes.ProductNotFound);
         machine.FindSlot(product.Id)!.Quantity.Should().Be(quantityBefore);
@@ -159,7 +157,7 @@ public class VendingMachineTests
         var bankBefore = machine.Bank.ToSnapshot();
         var insertedBefore = machine.InsertedCoins.ToSnapshot();
 
-        var act = () => machine.Purchase(product.Id, FakeChangeCalculator.AlwaysFails());
+        var act = () => machine.Purchase(product.Id, new BoundedChangeCalculator());
 
         act.Should().Throw<DomainException>().Which.Code.Should().Be(ErrorCodes.OutOfStock);
         machine.FindSlot(product.Id)!.Quantity.Should().Be(0);
@@ -176,7 +174,7 @@ public class VendingMachineTests
         var insertedBefore = machine.InsertedCoins.ToSnapshot();
         var quantityBefore = machine.FindSlot(product.Id)!.Quantity;
 
-        var act = () => machine.Purchase(product.Id, FakeChangeCalculator.AlwaysFails());
+        var act = () => machine.Purchase(product.Id, new BoundedChangeCalculator());
 
         act.Should().Throw<DomainException>().Which.Code.Should().Be(ErrorCodes.InsufficientFunds);
         machine.FindSlot(product.Id)!.Quantity.Should().Be(quantityBefore);
@@ -203,21 +201,18 @@ public class VendingMachineTests
     }
 
     [Theory]
-    [InlineData(150, 200, 50, 1)]
-    [InlineData(200, 200, 0, 0)]
-    public void Purchase_OnSuccess_PaidCentsEqualsPriceCentsPlusChangeCents(
-        int priceCents, int insertedCents, int changeDenomination, int changeCount)
+    [InlineData(150, 200)]
+    [InlineData(200, 200)]
+    [InlineData(145, 200)]
+    public void Purchase_OnSuccess_PaidCentsEqualsPriceCentsPlusChangeCents(int priceCents, int insertedCents)
     {
-        var changeCoins = changeCount == 0
-            ? new Dictionary<int, int>()
-            : new Dictionary<int, int> { [changeDenomination] = changeCount };
         var machine = LoadSingleProductMachine(priceCents, 5, new Dictionary<int, int> { [50] = 5, [5] = 5 }, out var product);
         foreach (var coin in DenominateInsert(insertedCents))
         {
             machine.InsertCoin(coin);
         }
 
-        var result = machine.Purchase(product.Id, FakeChangeCalculator.AlwaysSucceedsWith(changeCoins));
+        var result = machine.Purchase(product.Id, new BoundedChangeCalculator());
 
         result.PaidCents.Should().Be(result.PriceCents + result.ChangeCents);
     }

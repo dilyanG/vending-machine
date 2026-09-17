@@ -9,10 +9,10 @@ the same commit as the work it describes. Rules: `CLAUDE.md` §7.
 
 ## Next up
 
-1. `P2-1` … `P2-4` — change calculator (still open; P4's `Purchase` needs a
-   real `IChangeCalculator`, not just the interface P1-7 declared)
-2. `P4-1` … `P4-7` — vending use cases
-3. `P5-1` … `P5-6` — HTTP API
+1. `P6-2`, `P6-3` — API DTOs and `ProductsApiService`/`VendingApiService`,
+   unblocked now the contract is frozen
+2. `P6-8` — the API-service half of this (pipe tests already exist)
+3. `P7-1` … `P7-9` — vending UI
 
 ## Open questions
 
@@ -49,12 +49,31 @@ below and the decision log. `CoinBundle`/`P1-3` superseded.
 - [x] `P1-8` `CoinInventory` mutable entity, replacing `CoinBundle`, used for
       both the bank and the session's inserted coins
 
-### P2 — Change calculation `[ ]`
+### P2 — Change calculation `[x]`
 
-- [ ] `P2-1` `IChangeCalculator` + `ChangeResult`
-- [ ] `P2-2` Bounded coin-change DP, minimal coin count
-- [ ] `P2-3` Comment documenting why greedy is wrong, with counterexample
-- [ ] `P2-4` Tests incl. the greedy counterexample and the empty-bank case
+Executed after P3 (see P3's session log for why) - the interface and result
+type P1-7 declared are now actually implemented.
+
+- [x] `P2-1` `ChangeResult` — `Made`/`NotPossible` factories (renamed from
+      P1-7's `Success`/`Failure` to match this task), `TotalCents` added;
+      `IChangeCalculator`'s signature confirmed unchanged from P1-7
+- [x] `P2-2` `BoundedChangeCalculator` — bounded coin-change DP exactly as
+      specified (denominations ascending, min coins, deterministic
+      larger-denomination tie-break — see decision log for how)
+- [x] `P2-3` Class-level comment with the worked 60c-from-{50:1,20:3}
+      counterexample
+- [x] `P2-4` 13 tests: boundary table (amount 0, exact coin, impossible,
+      empty bank, bank smaller than amount), the named greedy-counterexample
+      test, minimal-coin-count, unaccepted-denomination filtering, purity,
+      determinism, a Stopwatch-measured performance test (500c/200 coins:
+      ~2ms, budget 50ms), and a range-of-amounts property test
+- [x] `P2-5` Wired the real calculator into the `VendingMachine` purchase
+      tests (P1-7), replacing the hand-written fake everywhere except the
+      one `CHANGE_UNAVAILABLE` test, which still needs a fake that always
+      reports impossible to exercise that path deterministically. Added
+      `SpyChangeCalculator` (wraps the real calculator, records the last
+      call's arguments) so the "offers bank + inserted coins to the
+      calculator" test could use real computation too, not just a stub.
 
 ### P3 — Service layer: products `[x]`
 
@@ -64,25 +83,85 @@ seed file and a real concurrent-first-call race). `P3-1`…`P3-6` all done,
 executed ahead of P2 (see decision/session log for the store/name-uniqueness
 calls) — see `CLAUDE.md` §2.6/§4.1.
 
-### P4 — Application layer: vending `[ ]`
+### P4 — Service layer: vending `[x]`
 
-- [ ] `P4-1` `ICoinBank` + `InMemoryCoinBank`, float from config
-- [ ] `P4-2` `VendingSession`
-- [ ] `P4-3` `InsertCoin` with denomination validation
-- [ ] `P4-4` `Purchase` with rollback on `CHANGE_UNAVAILABLE`
-- [ ] `P4-5` `Reset` returning identical denominations
-- [ ] `P4-6` Single lock over session + bank + inventory
-- [ ] `P4-7` Tests incl. atomicity proof and `paid == price + change`
+Much smaller than `IMPLEMENTATION_PLAN.md` describes — the P1 aggregate
+refactor already absorbed most of it. See decision log.
 
-### P5 — HTTP API `[ ]`
+- [-] `P4-1` `ICoinBank` + `InMemoryCoinBank`, float from config —
+      **superseded**: the `VendingMachine` aggregate owns its own `Bank`
+      (`CoinInventory`), built in P1-7/P3-4
+- [-] `P4-2` `VendingSession` — **superseded**: the aggregate owns the
+      session (`InsertedCoins`/`InsertedTotalCents`) directly, built in P1-7
+- [x] `P4-3` `VendingService.InsertCoinAsync` — one call to
+      `VendingMachine.InsertCoin`, maps to `SessionDto`
+- [x] `P4-4` `VendingService.PurchaseAsync` — one call to
+      `VendingMachine.Purchase`, maps `PurchaseResult` to `PurchaseResultDto`
+      (no rollback code to write — P1-7's compute-then-commit ordering
+      already made a failed purchase a no-op)
+- [x] `P4-5` `VendingService.ResetAsync` — one call to
+      `VendingMachine.ReturnInsertedCoins`, maps to `ReturnedCoinsDto`
+- [-] `P4-6` Single lock over session + bank + inventory — **superseded**:
+      `InMemoryVendingMachineStore`'s `SemaphoreSlim` (P3-4) already guards
+      every call into the aggregate, mutating or not
+- [-] `P4-7` Tests incl. atomicity proof and `paid == price + change` —
+      **superseded**: both already proven on the aggregate in
+      `VendingMachineTests` (P1-7/P2-5)
+- [x] `P4-8` DI: `ServiceCollectionExtensions.AddVendingMachineBackend` in
+      `VM.Server.Repository` (the first composition-root registration in the
+      solution — P3's scope excluded API/DI entirely, so nothing existed
+      yet to extend; see decision log) registers `IExternalCatalogSource`,
+      `IVendingMachineStore`, `IChangeCalculator` → `BoundedChangeCalculator`,
+      `ProductService` and `VendingService`, all singleton
+- [x] `P4-9` 6 `VendingServiceTests`: consistent `PurchaseAsync` DTO
+      (`paid == price + change`), real `BoundedChangeCalculator` wired in
+      (asserted against the same greedy-counterexample bank as
+      `BoundedChangeCalculatorTests`), `changeCoins`/`returnedCoins` sorted
+      descending, a `DomainException` surfacing with its code intact,
+      `GetDenominationsAsync` ascending, `ResetAsync` round-trip
 
-- [ ] `P5-1` Minimal API endpoint groups
-- [ ] `P5-2` DTOs per `CLAUDE.md` §3.2
-- [ ] `P5-3` Exception middleware → §3.3 error shape
-- [ ] `P5-4` DI, CORS policy `frontend`, Swagger
-- [ ] `P5-5` Port fixed to 5080
-- [ ] `P5-6` `WebApplicationFactory` integration tests covering every route
-- [ ] **Contract frozen** — note the date here once P5 is merged
+### P5 — HTTP API `[x]`
+
+**Contract frozen: 2026-09-16.** Every route, payload and error shape in
+`CLAUDE.md` §3 is now live and tested; the frontend can build against it from
+`P6-2`/`P6-3` onward.
+
+- [x] `P5-1` `ExternalEndpoints`/`ProductEndpoints`/`VendingEndpoints` — one
+      static class per group, `MapGroup` + extension methods, registered from
+      `Program.cs`. Routes exactly as §3.1, nothing extra.
+- [x] `P5-2` DTOs matching §3.2: reused the existing `ProductDto`/`SessionDto`/
+      `PurchaseResultDto`/`ReturnedCoinsDto`/`CoinCountDto` from Service
+      (P3/P4) as the response bodies directly rather than duplicating
+      structurally-identical API-layer copies; added API-only
+      `ExternalProductDto` (no quantity), `CreateProductRequest`,
+      `UpdateProductRequest`, `InsertCoinRequest`, `PurchaseRequest` and
+      `ErrorResponseDto` for the shapes Service didn't already have
+- [x] `P5-3` `ExceptionHandlingMiddleware` — maps `DomainException` to the
+      §3.3 body with the exact status table; unmapped/non-domain exceptions
+      → 500 with a generic body (no stack trace, type name or path, in any
+      environment); business refusals logged at `Information`, everything
+      else at `Error`
+- [x] `P5-4` `AddVendingMachineBackend` (P4) plus a config-binding fix (see
+      decision log); CORS policy `frontend` from config; OpenAPI JSON in
+      Development via the already-referenced `Microsoft.AspNetCore.OpenApi`,
+      plus a zero-new-package CDN-loaded Swagger UI at `/swagger` (Development
+      only) so `.Produces<T>()` response/error documentation is actually
+      browsable, not just raw JSON
+- [x] `P5-5` `launchSettings.json` already had the HTTP-only profile on 5080
+      since P0 — confirmed, no change needed
+- [x] `P5-6` 26 `WebApplicationFactory` integration tests — every §3.1 route,
+      every error code asserted by its `code` field (not just status), the
+      full happy path, `CHANGE_UNAVAILABLE` leaving the session intact,
+      reset/reload round trips, and a 500-with-no-leak test (a test-only fake
+      `IVendingMachineStore`, not a production backdoor — see decision log).
+      **Isolation: each test class owns its own `WebApplicationFactory`**
+      (created in the constructor, disposed via `IDisposable`) rather than a
+      shared `IClassFixture` — xUnit's per-test class instantiation then
+      gives every test its own singleton store for free, no explicit reset
+      needed
+- [x] `P5-7` Six placeholder product SVGs in
+      `src/vm-client/public/assets/products/`, one per `catalogue.seed.json`
+      `imageUrl` — confirmed every path resolves
 
 ### P6 — Frontend foundation `[~]`
 
@@ -325,6 +404,105 @@ Format: `YYYY-MM-DD — decision — why — alternatives rejected`
   with the same live check afterward. Escape-to-close, initial focus
   placement and outside-content containment are still left entirely to the
   browser, since those parts do work natively.
+- `2026-09-17` — **`BoundedChangeCalculator` stays the straightforward
+  O(denominations × amount × count) DP** — six denominations, change under a
+  few hundred cents, counts in the low hundreds — the measured worst case in
+  this repo's own performance test is ~2ms for 500c against 200 coins, four
+  orders of magnitude under the 50ms budget. A logarithmic-time approach
+  (binary/power-of-two splitting the per-denomination counts to shrink the
+  inner loop) would earn its complexity at a much larger scale, but here it
+  would only make the algorithm harder for a reviewer to verify by reading —
+  and correctness-by-inspection is worth more than headroom nobody needs.
+  Rejected switching algorithms pre-emptively for input sizes this domain
+  will never see.
+- `2026-09-17` — **Denominations are fed to the DP in ascending order**, with
+  a tie-break that keeps the *largest* `k` among equally-good candidates at
+  each layer — this is not an arbitrary choice: because ascending order
+  means the largest denomination (200c) is decided *last*, its choice is
+  made with full knowledge of the true optimal cost for every smaller
+  remainder (already computed), so "prefer more of the current denomination
+  on a tie" only ever fires at that point in a way that correctly favours
+  larger denominations globally, not just locally. Verified by hand against
+  a constructed tie (60c from `{20:3, 50:1, 5:2}` with no 10c/100c/200c
+  available — two different 3-coin solutions exist, `{20:3}` and
+  `{50:1,5:2}`; the algorithm returns the latter, which has strictly more of
+  the larger 50c denomination). Rejected descending order, which would put
+  this same tie-break on the *smallest* denomination's decision instead and
+  produce the opposite (wrong) preference.
+- `2026-09-18` — **The P1 aggregate refactor shrank P4 to a thin mapping
+  layer**, well below what `IMPLEMENTATION_PLAN.md` originally scoped for it
+  — worth recording explicitly since a reviewer comparing the plan to the
+  code will otherwise wonder what happened to four of its seven tasks.
+  Absorbed: `P4-1` (`ICoinBank`/`InMemoryCoinBank`) — the `VendingMachine`
+  aggregate owns `Bank` directly; `P4-2` (`VendingSession`) — the aggregate
+  owns `InsertedCoins`/`InsertedTotalCents` directly; `P4-6` (a lock over
+  session+bank+inventory) — done once, in `InMemoryVendingMachineStore`'s
+  `SemaphoreSlim` (P3-4), which already guards every call whether P3's
+  `ProductService` or P4's `VendingService` makes it; `P4-7` (atomicity +
+  `paid == price + change` tests) — already proven directly on the
+  aggregate in P1-7/P2-5, where the invariant actually lives. What
+  remained for P4 itself: `VendingService` (`P4-3`/`P4-4`/`P4-5`), each
+  method one aggregate call plus DTO mapping, no business logic; `P4-8` (DI)
+  and `P4-9` (tests for the mapping only) were added since the original plan
+  didn't anticipate a composition root existing yet at this point.
+- `2026-09-18` — **`ServiceCollectionExtensions.AddVendingMachineBackend`
+  lives in `VM.Server.Repository`, not `VM.Server.API`** — this task assumed
+  P3 had already established a composition-root extension method to extend,
+  but P3's scope explicitly excluded API/DI entirely, so nothing existed;
+  this is the first one in the solution. Repository is the only project that
+  can see both Service's interfaces and its own implementations of them
+  (`API → Service → Domain`, `Repository` implements `Service`'s
+  abstractions, per `CLAUDE.md` §4.1), so it can register the whole backend
+  behind one call; P5's `Program.cs` will just invoke it — rejected putting
+  the registrations in API directly, which would need to reference
+  Repository's concrete types anyway and scatters wiring across two
+  projects instead of one.
+- `2026-09-16` — **Found and fixed a real P4 bug while doing P5's required
+  manual curl verification**: `AddVendingMachineBackend` registered
+  `InMemoryVendingMachineStore` but never called
+  `services.Configure<VendingMachineOptions>(...)`, so `IOptions` silently
+  fell back to an all-default instance — an **empty** coin bank in the
+  actual running app (`InitialQuantityPerSlot` happened to still default
+  correctly to 10, masking half the bug). Every unit test had bypassed this
+  entirely by constructing `Options.Create(new VendingMachineOptions {...})`
+  directly, so nothing caught it before a real HTTP purchase did. Fixed by
+  binding in `API/Program.cs` instead of `Repository`: the
+  `Configure<TOptions>(IConfiguration)` overload lives in
+  `Microsoft.Extensions.Options.ConfigurationExtensions`, which a plain
+  class library like `Repository` doesn't have, but which `API` gets for
+  free via the ASP.NET Core shared framework (`Microsoft.NET.Sdk.Web`) —
+  so no new package was needed. This is exactly why the phase's "start the
+  API and run the full happy path with curl" step exists rather than
+  trusting build-green/tests-green alone.
+- `2026-09-16` — **API endpoints return the existing Service-layer DTOs
+  directly** (`ProductDto`, `SessionDto`, `PurchaseResultDto`,
+  `ReturnedCoinsDto`, `CoinCountDto`) rather than a parallel set of
+  structurally-identical `API.Dtos.*` types — they already match §3.2's wire
+  shapes exactly (camelCase via STJ defaults, quantity already assembled
+  from the slot), so a second copy would be pure duplication mapped by a
+  method that does nothing. New API-only DTOs were added only for shapes
+  Service doesn't have a reason to own: `ExternalProductDto` (no quantity -
+  a different shape from `ProductDto`, and mapping it is genuinely an API
+  concern since `IExternalCatalogSource` returns raw `Product` entities) and
+  the four request records (`Create`/`UpdateProductRequest`,
+  `InsertCoinRequest`, `PurchaseRequest`), since Service's methods take
+  primitives, not request objects.
+- `2026-09-16` — **A CDN-loaded Swagger UI page at `/swagger` (Development
+  only), not just the bare OpenAPI JSON from `MapOpenApi()`** — costs no new
+  NuGet package (`swagger-ui-dist` loads from `cdn.jsdelivr.net` in a small
+  static HTML page, gated behind `IsDevelopment()`), fulfills the README's
+  pre-existing "Swagger UI" promise literally, and is genuinely useful for a
+  reviewer who wants to click through the API rather than read raw JSON —
+  rejected adding the Swashbuckle package (violates "no new packages") and
+  rejected downgrading the README's claim to describe raw JSON only, when a
+  real UI was achievable for free.
+- `2026-09-16` — **`POST /api/products/reload` and the `DELETE`/create
+  actions return `204 No Content`/`201 Created` respectively**, choices
+  `CLAUDE.md` §3 doesn't pin down explicitly (only the purchase/reset
+  bodies are shown) — standard REST convention, and reload in particular
+  has no natural response body to promise since its entire job is
+  discarding state, not returning it (callers needing the refreshed list
+  already have `GET /api/products` for that).
 
 ---
 
@@ -482,3 +660,64 @@ needs to know.
   a `setTimeout` racing the same browser-internal queued task). Fixed
   `CLAUDE.md` §3.3 and a stale README config row along the way (see decision
   log). P6 now `[~]`; `P6-2`/`P6-3`/`P6-8` remain, blocked on P5.
+- `2026-09-17` — P2 (`P2-1`…`P2-5`), Domain + Domain.Tests only:
+  `BoundedChangeCalculator` (bounded coin-change DP, exact algorithm from the
+  task spec - ascending denominations, deterministic largest-denomination
+  tie-break, no denomination outside `CoinDenominations` ever surfaces even
+  if the input dictionary has one). `ChangeResult`'s factories renamed
+  `Success`/`Failure` → `Made`/`NotPossible` to match this task's P2-1 spec
+  (the only caller was `FakeChangeCalculator`, updated); `IChangeCalculator`
+  unchanged. Wired the real calculator into the P1-7 purchase tests
+  (`Calculate_WhenGreedyWouldStrand_FindsTheCorrectCombination` is the named
+  proof the counterexample works); kept one fake for the deterministic
+  `CHANGE_UNAVAILABLE` path and added `SpyChangeCalculator` so the
+  "offers bank + inserted coins" test could use real computation and still
+  inspect what was passed. 13 new calculator tests incl. a Stopwatch-measured
+  performance test (500c/200 coins in ~2ms, budget 50ms) and a
+  range-of-amounts property test. 95 tests total across the solution, all
+  green. See decision log for the algorithm-choice and tie-break-correctness
+  reasoning. Closes P2.
+- `2026-09-18` — P4, much smaller than planned (see decision log for why):
+  `VendingService` in `Service/Vending` — `GetDenominationsAsync`/
+  `GetSessionAsync`/`InsertCoinAsync`/`PurchaseAsync`/`ResetAsync`, each one
+  `IVendingMachineStore.AccessAsync` call into exactly one `VendingMachine`
+  method plus hand-written DTO mapping (`CoinCountDto`/`SessionDto`/
+  `PurchaseResultDto`/`ReturnedCoinsDto`, matching `CLAUDE.md` §3.2's shapes,
+  coin arrays sorted denomination-descending). Added the solution's first
+  composition-root DI extension
+  (`VM.Server.Repository.ServiceCollectionExtensions.AddVendingMachineBackend`,
+  singleton lifetimes throughout) registering everything P3 and P4 need,
+  including `BoundedChangeCalculator` as `IChangeCalculator` — no new
+  package, `Microsoft.Extensions.DependencyInjection.Abstractions` was
+  already transitively available via `Microsoft.Extensions.Options`. 6 new
+  `VendingServiceTests` (mapping consistency, real-calculator wiring against
+  the same greedy-counterexample bank as `BoundedChangeCalculatorTests`,
+  sort order, `DomainException` passthrough, denominations ascending, reset
+  round-trip) — no business-rule tests duplicated, they're on the aggregate.
+  `VM.Server.Service.csproj` still only references Domain. 101 tests total
+  across the solution (79 Domain + 21 Service + 1 API placeholder), all
+  green. Closes P4. Next: P5 (HTTP API, contract freeze).
+- `2026-09-16` — P5 (`P5-1`…`P5-7`), the API contract frozen:
+  `ExternalEndpoints`/`ProductEndpoints`/`VendingEndpoints` (Minimal API,
+  `MapGroup`), `ExceptionHandlingMiddleware` (§3.3 shape, exact status
+  table, Information/Error log split), DI + CORS + OpenAPI/Swagger wired
+  into `Program.cs`. Caught and fixed a real bug during the required manual
+  curl pass: the coin bank was silently empty in the live app because P4's
+  DI never bound `VendingMachineOptions` from configuration (see decision
+  log) - unit tests never would have caught this since they all construct
+  options directly. 26 new `WebApplicationFactory` integration tests
+  (isolation: one factory per test class instance, documented in
+  `TestApp.cs`) cover every route, every error code by its `code` field,
+  the full happy path, `CHANGE_UNAVAILABLE` leaving the session untouched,
+  reset/reload round trips, and a 500 with no leaked detail (via a
+  test-only throwing fake, not a production backdoor). Six placeholder
+  product SVGs added under `src/vm-client/public/assets/products/`, every
+  `catalogue.seed.json` `imageUrl` confirmed to resolve. Pasted the full
+  manual verification: `dotnet build`/`test` (126 total, all green),
+  denominations → insert 100/50/20 → session → purchase (paid 170, price
+  85, change 85 = 50+20+10+5, quantity 10→9) → insert 200/10 → reset
+  (returned 200+10) → session empty, plus a deliberate `CHANGE_UNAVAILABLE`
+  (422, empty-bank override) and a deliberate `PRODUCT_NOT_FOUND` (404).
+  README's routes and Swagger claim already matched exactly - no changes
+  needed. Closes P5. Next: P6-2/P6-3 (frontend API services), now
+  unblocked.

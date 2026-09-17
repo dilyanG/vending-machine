@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+  <rect width="200" height="200" fill="#dcfce7"/>
+  <path d="M75 35 h50 v25 l10 10 v90 a8 8 0 0 1 -8 8 h-54 a8 8 0 0 1 -8 -8 v-90 l10 -10 Z"
+        fill="#16a34a" stroke="#14532d" stroke-width="4"/>
+  <path d="M105 70 l-15 25 h12 l-8 22 22 -28 h-12 Z" fill="#fde047"/>
+  <text x="100" y="180" text-anchor="middle" font-family="sans-serif" font-size="14" fill="#14532d">Energy Drink</text>
+</svg>
