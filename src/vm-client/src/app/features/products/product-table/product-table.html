@@ -1,0 +1,71 @@
+<table class="vm-product-table" data-testid="product-table">
+  <caption class="visually-hidden">Products</caption>
+  <thead>
+    <tr>
+      <th scope="col"><span class="visually-hidden">Image</span></th>
+      <th scope="col">Name</th>
+      <th scope="col">Price</th>
+      <th scope="col">Stock</th>
+      <th scope="col"><span class="visually-hidden">Actions</span></th>
+    </tr>
+  </thead>
+  <tbody>
+    @for (product of products(); track product.id) {
+      <tr>
+        <td>
+          <img
+            class="vm-product-table__thumb"
+            [src]="product.imageUrl ?? 'assets/products/placeholder.svg'"
+            [alt]="product.name"
+            width="40"
+            height="40"
+            loading="lazy"
+          />
+        </td>
+        <td>{{ product.name }}</td>
+        <td>{{ product.priceCents | centsToCurrency }}</td>
+        <td>
+          <vm-badge [variant]="stockBadgeVariant(product.quantity)">{{
+            stockLabel(product.quantity)
+          }}</vm-badge>
+        </td>
+        <td class="vm-product-table__actions">
+          <vm-button variant="ghost" size="md" [disabled]="busy()" (click)="edit.emit(product)">
+            Edit
+          </vm-button>
+          <vm-button variant="danger" size="md" [disabled]="busy()" (click)="remove.emit(product)">
+            Delete
+          </vm-button>
+        </td>
+      </tr>
+    }
+  </tbody>
+</table>
+
+<ul class="vm-product-cards" data-testid="product-cards">
+  @for (product of products(); track product.id) {
+    <li class="vm-product-cards__item">
+      <img
+        class="vm-product-cards__thumb"
+        [src]="product.imageUrl ?? 'assets/products/placeholder.svg'"
+        [alt]="product.name"
+        width="56"
+        height="56"
+        loading="lazy"
+      />
+      <div class="vm-product-cards__body">
+        <p class="vm-product-cards__name">{{ product.name }}</p>
+        <p class="vm-product-cards__price">{{ product.priceCents | centsToCurrency }}</p>
+        <vm-badge [variant]="stockBadgeVariant(product.quantity)">{{
+          stockLabel(product.quantity)
+        }}</vm-badge>
+      </div>
+      <div class="vm-product-cards__actions">
+        <vm-button variant="ghost" [disabled]="busy()" (click)="edit.emit(product)">Edit</vm-button>
+        <vm-button variant="danger" [disabled]="busy()" (click)="remove.emit(product)">
+          Delete
+        </vm-button>
+      </div>
+    </li>
+  }
+</ul>

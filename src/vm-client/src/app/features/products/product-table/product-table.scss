@@ -1,0 +1,96 @@
+@use 'mixins';
+
+:host {
+  display: block;
+}
+
+// Table: hidden below md, real <table> markup from md up.
+.vm-product-table {
+  display: none;
+  width: 100%;
+  border-collapse: collapse;
+
+  @include mixins.respond-to(md) {
+    display: table;
+  }
+}
+
+.vm-product-table th,
+.vm-product-table td {
+  padding: var(--space-3);
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+
+.vm-product-table__thumb {
+  width: 2.5rem;
+  height: 2.5rem;
+  aspect-ratio: 1 / 1;
+  border-radius: var(--radius-sm);
+}
+
+.vm-product-table__actions {
+  display: flex;
+  gap: var(--space-2);
+  justify-content: flex-end;
+}
+
+// Cards: the default (below md), hidden from md up.
+.vm-product-cards {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  list-style: none;
+  padding: 0;
+  margin: 0;
+
+  @include mixins.respond-to(md) {
+    display: none;
+  }
+}
+
+.vm-product-cards__item {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.vm-product-cards__thumb {
+  width: var(--space-7);
+  height: var(--space-7);
+  aspect-ratio: 1 / 1;
+  border-radius: var(--radius-sm);
+  grid-row: span 2;
+}
+
+.vm-product-cards__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.vm-product-cards__name {
+  margin: 0;
+  font-weight: 600;
+}
+
+.vm-product-cards__price {
+  margin: 0;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.vm-product-cards__actions {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: var(--space-2);
+}
+
+.vm-product-cards__actions > vm-button {
+  flex: 1;
+}

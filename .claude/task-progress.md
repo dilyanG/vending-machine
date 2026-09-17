@@ -9,8 +9,7 @@ the same commit as the work it describes. Rules: `CLAUDE.md` §7.
 
 ## Next up
 
-1. `P8-1` … `P8-7` — products admin UI
-2. `P9` — polish, verification, handover
+1. `P9-1` … `P9-9` — polish, verification, handover
 
 ## Open questions
 
@@ -99,54 +98,56 @@ alone (see decision/session log for the `insertedCoins` field-name finding).
 
 ### P7 — Vending UI `[x]`
 
-- [x] `P7-1` `vending.store` signal store (`core/state/vending.store.ts`) —
-      private writable signals, public `.asReadonly()` views; `busy` gates
-      `insertCoin`/`purchase`/`reset` so a double-click never fires two
-      requests; `purchase`/`reset` apply the response in place (patch the
-      product, zero the session) rather than refetching; `canAfford` is a
-      plain method (not `computed()`, which cannot take an argument) reading
-      `insertedTotal`/`products` for UX only
-- [x] `P7-2` `vm-machine-display` — the page's one `role="status"
-      aria-live="polite"` region, wrapping both the inserted total and the
-      current prompt/error together so an update announces once
-- [x] `P7-3` `vm-coin-slot` — one button per `denominations()` entry (never
-      hard-coded), circles sized by a `--coin-t` ratio computed from the live
-      list so no pixel value depends on which denominations the API returns;
-      `Return coins` disabled when nothing is inserted
-- [x] `P7-4` `vm-product-grid` + `vm-product-card` — three stock states
-      (out-of-stock/low-stock/in-stock) plus an unaffordable-but-buyable
-      state; Buy is never natively `disabled` when merely unaffordable, and
-      even when out of stock it's `aria-disabled` (extended `vm-button` for
-      this — focusable, `aria-describedby` reason — see decision log), not
-      natively disabled, so screen-reader users can still reach it and be
-      told why
-- [x] `P7-5` `vm-change-tray` — per-denomination breakdown via a new
-      `denominationLabel` pipe ("1 x 50c", not "55c"); moves focus to itself
-      via an `effect()` when `lastPurchase` transitions to non-null
-- [x] `P7-6` Return-coins wired to `store.reset()`, coin-slot
-- [x] `P7-7` Responsive: grid 1/2/3/4 columns at base/sm/md/lg; panel sticky
-      at the bottom below `lg`, static side column above it; a
-      `ResizeObserver`-measured `--vm-panel-height` custom property pads the
-      product section so the sticky bar never covers the last row — verified
-      live (see session log), not assumed
-- [x] `P7-8` Loading skeleton, an empty state, a retryable load-failure
-      state, and a runtime-error state (message shown in `vm-machine-display`
-      while the rest of the screen stays usable) — `CHANGE_UNAVAILABLE`
-      leaves `insertedTotal` visibly unchanged, verified live against a
-      deliberately drained coin bank, not simulated
-- [x] `P7-9` 8 store specs (see `P7-1`) + 4 `vm-product-card` specs (in
-      stock/low stock/out of stock/unaffordable, queried by
-      `data-testid`/role, never CSS class)
+`vending.store` (busy-gated `insertCoin`/`purchase`/`reset`, response applied
+in place, never refetched), `vm-machine-display` (the one `aria-live`
+region), `vm-coin-slot` (denominations from the API, proportionally-sized
+circles), `vm-product-grid`/`vm-product-card` (three stock states plus an
+unaffordable-but-buyable one — Buy is `aria-disabled`, never natively
+`disabled`, so out-of-stock is still reachable/explained to AT users),
+`vm-change-tray` (per-denomination breakdown, focus-on-purchase), the
+`ResizeObserver`-measured sticky mobile coin panel, and loading/empty/error
+states. `P7-1`…`P7-9` all done — 22 tests (8 store + 4 `vm-product-card` +
+others). See decision/session log for the `vm-button` extension, the
+`denominationLabel` pipe, and the live-verified `CHANGE_UNAVAILABLE`/
+sticky-panel-overlap findings.
 
-### P8 — Products admin UI `[ ]`
+### P8 — Products admin UI `[x]`
 
-- [ ] `P8-1` `products.store`
-- [ ] `P8-2` Responsive table / card list
-- [ ] `P8-3` `product-form-dialog` with full validation
-- [ ] `P8-4` Delete confirmation
-- [ ] `P8-5` Reload-from-external-catalog action
-- [ ] `P8-6` Server errors mapped onto form fields
-- [ ] `P8-7` Form validation tests
+- [x] `P8-1` `products.store` (`core/state/products.store.ts`) — same
+      private-signal/`.asReadonly()` shape as `vending.store`, kept
+      deliberately separate (different concerns, same entity). Mutating
+      methods return the underlying `Observable` (not auto-subscribed) so
+      the page can react to *that specific* submission's outcome for field
+      -level error mapping, while the store still applies the result via
+      `tap` — list never refetched after create/update/delete. `reload()` is
+      the one exception: `POST /api/products/reload` returns 204 (no body to
+      apply), so it `switchMap`s into a follow-up `GET` — see decision log
+- [x] `P8-2` `vm-product-table` — a real `<table>` (md+) and a card `<ul>`
+      (below md) both always rendered, toggled by plain CSS `display`, not
+      one table reflowed with ARIA-role overrides
+- [x] `P8-3` `vm-product-form-dialog` — typed reactive form in `vm-modal`,
+      euro-entry price converted with `Math.round(parseFloat(v) * 100)` (not
+      truncated), validators mirroring the server (positive, multiple of 5,
+      quantity 0–15) plus a client-only duplicate-price convenience check
+- [x] `P8-4` Delete via `vm-confirm-dialog`, danger variant, names the
+      product; focus-return to the row's Delete button comes free from
+      `vm-modal`'s existing trigger-focus-restore (P6-9) — confirmed live,
+      not assumed
+- [x] `P8-5` Reload confirm dialog (states plainly that the external
+      catalogue is never modified) plus a post-reload count message; an
+      optional read-only external-catalogue disclosure panel via
+      `ExternalCatalogApiService`, injected directly in the page (not
+      through a store — see decision log)
+- [x] `P8-6` `DUPLICATE_PRODUCT`→name, `DUPLICATE_PRICE`/`INVALID_PRICE`→price,
+      `INVALID_QUANTITY`→quantity, each via `setErrors({..., server: msg})`
+      + `markAsTouched()` so it's visible immediately; anything else falls
+      back to a dialog-level message; the dialog never closes itself on a
+      failed submission
+- [x] `P8-7` 16 validator specs (euro-to-cents for 1.45/2.30/0.85/19.99/0.05,
+      round-trip, 1.43 rejected/1.45 accepted) + 7 component specs (quantity
+      16/0/15, `DUPLICATE_PRICE` on the price field with values preserved,
+      the price round-trip through the real dialog) + 7 store specs
+      (create/update/delete/reload without refetch, busy guard)
 
 ### P9 — Polish, verification, handover `[ ]`
 
@@ -524,6 +525,75 @@ Format: `YYYY-MM-DD — decision — why — alternatives rejected`
   by comparing raw unscrolled bounding-rect numbers (which looked like a
   false-positive "overlap" until re-checked at the real scroll position —
   see session log).
+- `2026-09-17` — **`products.store`'s mutating methods return the underlying
+  `Observable<T>` instead of being fire-and-forget like `vending.store`'s**
+  — `vending.store` never needed a per-call result because nothing on the
+  vending screen reacts differently per attempt; the product form dialog
+  genuinely does (map *this* submission's `DUPLICATE_PRICE` onto the price
+  field, keep the dialog open with the user's values intact). The store
+  still applies the result to `products` via `tap` internally, so the
+  "apply the response, don't refetch" rule holds either way — only the
+  page additionally subscribes to route the per-call outcome into the
+  dialog. Rejected keeping it void-returning like `vending.store` (the page
+  would have no way to know which specific attempt failed) and rejected
+  putting per-submission error state in the store itself (a `lastError`
+  signal would need to be cleared at exactly the right moments and doesn't
+  generalise to "this dialog's last attempt" cleanly the way a returned
+  Observable does for free).
+- `2026-09-17` — **`reload()` is the one `products.store` mutation that
+  refetches instead of applying a response** — `POST /api/products/reload`
+  returns `204 No Content` (CLAUDE.md's own P5 decision), so there is
+  nothing to apply; `switchMap`s into a follow-up `GET /api/products`
+  instead. Documented as a deliberate, narrow exception to the "apply the
+  response, don't refetch" rule, not a drift from it.
+- `2026-09-17` — **Extracted `stockBadgeVariant`/`stockLabel` out of
+  `vm-product-card` into a shared `shared/ui/badge/stock-badge.ts`**, used
+  by both `vm-product-card` (vending) and the new `vm-product-table`
+  (products admin) — both needed the exact same
+  out-of-stock/low-stock/in-stock thresholds and wording; keeping two copies
+  risked exactly the kind of silent drift the rest of this project's shared
+  tokens/mixins already guard against for colour and breakpoints. Behaviour
+  -preserving: `vm-product-card`'s own tests still pass unchanged.
+- `2026-09-17` — **`vm-product-table` renders a real `<table>` (md+) and a
+  card `<ul>` (below md) simultaneously, toggled by plain CSS
+  `display`**, rather than one `<table>` whose cells get reflowed into
+  card-like blocks below `md` via CSS with explicit ARIA `role="table"`/
+  `role="row"`/`role="cell"` overrides — the reflow technique is a known
+  a11y minefield (some browsers/AT combinations lose native table semantics
+  the moment `display` changes on table elements even with role overrides
+  restoring them), whereas two plain, always-correct markup structures with
+  one hidden via `display: none` is boring, easy to verify by reading, and
+  never exposes broken semantics to AT since hidden content is excluded
+  from the accessibility tree regardless of technique. Cost: duplicated
+  markup for six fields; judged worth it for the accessibility certainty.
+- `2026-09-17` — **The euro-to-cents conversion uses
+  `Math.round(parseFloat(value) * 100)`**, exactly as this task's own
+  warning specified — `parseFloat('1.45') * 100` is
+  `144.99999999999997`, which truncates to `144` and silently prices
+  everything a cent low. Verified directly: 16 unit tests including the
+  five example values (1.45→145, 2.30→230, 0.85→85, 19.99→1999, 0.05→5)
+  and a round-trip test through `centsToEuroString`, before any UI was
+  built on top of it, per the task's explicit "do not discover this in
+  review" instruction.
+- `2026-09-17` — **Server round-trip field errors call `.markAsTouched()`
+  in addition to `.setErrors()`** — Angular's `touched` state normally only
+  flips on blur, and this dialog's inline error messages are gated on
+  `invalid && touched`; without the explicit `markAsTouched()` call, a
+  server-side `DUPLICATE_PRICE` arriving on a field the user hadn't yet
+  blurred (e.g. they tabbed straight to Submit) would be silently
+  invisible — set but never rendered. Caught by a component test, not by
+  inspection.
+- `2026-09-17` — **A missing `assets/products/placeholder.svg` asset,
+  causing a live 404** — both `vm-product-card` (P7) and the new
+  `vm-product-table` fall back to this path for a product with
+  `imageUrl: null` (a real, expected case — the form's Image URL field is
+  optional), but no such file was ever created; only the six seed products'
+  named SVGs exist. Caught live during this phase's manual verification
+  (a 404 in the browser console right after creating a product with no
+  image) rather than by inspection, since neither `ng build` nor any unit
+  test resolves `<img src>` paths against the actual `public/` directory.
+  Added a simple neutral "No image" placeholder SVG matching the seed
+  assets' `200x200` viewBox style.
 - `2026-09-16` — **`POST /api/products/reload` and the `DELETE`/create
   actions return `204 No Content`/`201 Created` respectively**, choices
   `CLAUDE.md` §3 doesn't pin down explicitly (only the purchase/reset
@@ -860,3 +930,64 @@ needs to know.
   process directly (`TaskStop` alone didn't reach it — `npm start` had
   detached a child process outside the tracked task) and restarted clean.
   Closes P7. Next: P8 (products admin UI).
+- `2026-09-17` — P8 (`P8-1`…`P8-7`), products admin UI: `products.store`
+  (`core/state/products.store.ts`, mutating methods return the underlying
+  `Observable` — see decision log), `vm-product-table` (real `<table>` +
+  card `<ul>`, CSS-toggled, not one reflowed table), `vm-product-form-dialog`
+  (typed reactive form in `vm-modal`, `Math.round(parseFloat(v) * 100)`
+  euro-to-cents conversion, validators mirroring the server plus a
+  client-only duplicate-price convenience check), delete/reload confirm
+  dialogs via `vm-confirm-dialog`, an optional read-only external-catalogue
+  panel, and server-field-error mapping (P8-6). Extracted
+  `stockBadgeVariant`/`stockLabel` out of `vm-product-card` into a shared
+  `shared/ui/badge/stock-badge.ts` so `vm-product-table` doesn't duplicate
+  the low-stock threshold. 30 new tests (16 validator + 7 component +
+  7 store) — the validator tests cover the euro-to-cents trap directly
+  (1.45/2.30/0.85/19.99/0.05 and the round trip) before any UI touched it,
+  per the task's own "do not discover this in review" instruction.
+  `lint`/`build` green; `test:ci` 123/123 (two re-runs, stable — a Modal
+  test flaked once under full-suite load but passed 8/8 in isolation,
+  consistent with the pre-existing flakiness noted in the P6-9 session, not
+  a regression from this phase).
+
+  Manual verification, backend running, all done live:
+  - **Create/edit/delete/reload end to end**: created "Test Snack" at
+    €3.00, confirmed via a raw `fetch('/api/products')` (not the UI) that
+    `priceCents === 300` exactly — chose 3.00 over the task's own 1.45
+    example because 1.45 collides with the seed catalogue's real Cola price
+    and would have been legitimately blocked by the duplicate-price check;
+    the 1.45 example itself is proven by the validator unit tests instead.
+    Edited it back with no changes and confirmed the price round-tripped to
+    exactly 300c, then a real edit (name/price/quantity) applied correctly,
+    then deleted it, then reloaded and confirmed the catalogue returned to
+    exactly the 6 seed products with a "now holds 6 products" message shown.
+  - **Duplicate price caught on the field**: client-side, typing a price
+    matching Water's real seed price (0.85) blocked submission with
+    "Another product already uses this price" under the price field, no
+    request fired. Server-side, forced a genuine `DUPLICATE_PRICE` by
+    POSTing directly via `fetch` (bypassing the Angular form entirely) —
+    409 with the code intact.
+  - **Quantity 16**: blocked client-side (`aria-invalid`, dialog stays
+    open, no request fired, boundary 15 confirmed valid immediately after);
+    forced server-side via a direct `fetch` POST — 400 `INVALID_QUANTITY`.
+  - **Table at 360px / cards below md**: confirmed live at 320/360/768/
+    1024/1440px — the real `<table>` is hidden and the card list visible
+    below md, and the reverse at md and up; zero horizontal scroll at every
+    width. Screenshots saved.
+  - **Modal a11y**: 15 successive Tabs from the Add-product dialog's
+    initial focus never left the dialog (real focus trap, not assumed);
+    Escape closed it; focus returned to the Add product trigger button
+    afterward — confirmed via `document.activeElement`, not inference.
+  - **Dark mode**: tokens read back from the live page matched
+    `_tokens.scss`'s dark block exactly; screenshots of the table, the
+    open form dialog, and the mobile card list all reviewed in dark mode.
+  - **Delete focus-return** (P8-4's specific ask): confirmed live that
+    Cancel on the delete confirm dialog returns focus to that row's own
+    Delete button — this came free from `vm-modal`'s existing
+    trigger-focus-restore mechanism (P6-9), nothing new needed.
+
+  One real bug found and fixed live, not by inspection: `assets/products/
+  placeholder.svg` (the fallback image for a product with no `imageUrl`)
+  didn't exist, causing a 404 the moment a product without an image was
+  rendered — added a simple placeholder SVG matching the seed assets' style
+  (see decision log). Closes P8. Next: P9 (polish, verification, handover).

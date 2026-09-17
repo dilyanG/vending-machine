@@ -1,0 +1,118 @@
+<vm-modal [open]="open()" (closed)="closed.emit()">
+  <h2 modal-header>{{ dialogTitle() }}</h2>
+
+  <div modal-body [formGroup]="form" class="vm-form" data-testid="product-form">
+    @if (dialogLevelError()) {
+      <p class="vm-form__dialog-error" role="alert">{{ dialogLevelError() }}</p>
+    }
+
+    <div class="vm-form__field">
+      <label for="product-form-name">Name</label>
+      <input
+        id="product-form-name"
+        type="text"
+        formControlName="name"
+        [attr.aria-invalid]="form.controls.name.invalid && form.controls.name.touched ? 'true' : null"
+        [attr.aria-describedby]="
+          form.controls.name.invalid && form.controls.name.touched ? 'product-form-name-error' : null
+        "
+      />
+      @if (form.controls.name.invalid && form.controls.name.touched && form.controls.name.errors; as errors) {
+        <p class="vm-form__error" id="product-form-name-error">
+          @if (errors['server']) {
+            {{ errors['server'] }}
+          } @else if (errors['required']) {
+            Product name is required.
+          } @else if (errors['maxlength']) {
+            Name must be {{ NAME_MAX_LENGTH }} characters or fewer.
+          }
+        </p>
+      }
+    </div>
+
+    <div class="vm-form__field">
+      <label for="product-form-price">Price (€)</label>
+      <input
+        id="product-form-price"
+        type="text"
+        inputmode="decimal"
+        placeholder="1.45"
+        formControlName="priceEuros"
+        [attr.aria-invalid]="
+          form.controls.priceEuros.invalid && form.controls.priceEuros.touched ? 'true' : null
+        "
+        [attr.aria-describedby]="
+          form.controls.priceEuros.invalid && form.controls.priceEuros.touched
+            ? 'product-form-price-error'
+            : null
+        "
+      />
+      @if (form.controls.priceEuros.invalid && form.controls.priceEuros.touched && form.controls.priceEuros.errors; as errors) {
+        <p class="vm-form__error" id="product-form-price-error">
+          @if (errors['server']) {
+            {{ errors['server'] }}
+          } @else if (errors['required']) {
+            Price is required.
+          } @else if (errors['invalidFormat']) {
+            Enter a price like 1.45.
+          } @else if (errors['mustBePositive']) {
+            Price must be greater than €0.00.
+          } @else if (errors['notMultipleOfFive']) {
+            Price must be a multiple of 5 cents — the machine can't make any other
+            amount from its accepted coins.
+          } @else if (errors['duplicatePrice']) {
+            Another product already uses this price. Choose a different price.
+          }
+        </p>
+      }
+    </div>
+
+    <div class="vm-form__field">
+      <label for="product-form-quantity">Quantity</label>
+      <input
+        id="product-form-quantity"
+        type="number"
+        min="0"
+        [max]="MAX_QUANTITY_PER_PRODUCT"
+        step="1"
+        formControlName="quantity"
+        [attr.aria-invalid]="
+          form.controls.quantity.invalid && form.controls.quantity.touched ? 'true' : null
+        "
+        [attr.aria-describedby]="
+          form.controls.quantity.invalid && form.controls.quantity.touched
+            ? 'product-form-quantity-error'
+            : null
+        "
+      />
+      @if (form.controls.quantity.invalid && form.controls.quantity.touched && form.controls.quantity.errors; as errors) {
+        <p class="vm-form__error" id="product-form-quantity-error">
+          @if (errors['server']) {
+            {{ errors['server'] }}
+          } @else if (errors['required']) {
+            Quantity is required.
+          } @else if (errors['notInteger']) {
+            Quantity must be a whole number.
+          } @else if (errors['min']) {
+            Quantity can't be negative.
+          } @else if (errors['max']) {
+            Quantity can't exceed {{ MAX_QUANTITY_PER_PRODUCT }} — that's the
+            machine's capacity per product.
+          }
+        </p>
+      }
+    </div>
+
+    <div class="vm-form__field">
+      <label for="product-form-image-url">Image URL (optional)</label>
+      <input id="product-form-image-url" type="text" formControlName="imageUrl" />
+    </div>
+  </div>
+
+  <div modal-footer>
+    <vm-button variant="ghost" (click)="onCancel()">Cancel</vm-button>
+    <vm-button variant="primary" [loading]="saving()" (click)="onSubmit()">
+      {{ isEditMode() ? 'Save changes' : 'Add product' }}
+    </vm-button>
+  </div>
+</vm-modal>

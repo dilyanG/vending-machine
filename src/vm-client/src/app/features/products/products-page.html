@@ -1,1 +1,84 @@
-<h1>Products</h1>
+<div class="vm-products-page">
+  <header class="vm-products-page__header">
+    <h1>Products</h1>
+    <div class="vm-products-page__header-actions">
+      <vm-button variant="secondary" (click)="requestReload()">Reload from catalogue</vm-button>
+      <vm-button variant="primary" (click)="openCreate()">Add product</vm-button>
+    </div>
+  </header>
+
+  @if (reloadMessage()) {
+    <p class="vm-products-page__reload-message" role="status">{{ reloadMessage() }}</p>
+  }
+
+  @if (store.loading()) {
+    <div class="vm-products-page__skeleton" aria-hidden="true">
+      @for (row of [0, 1, 2, 3]; track row) {
+        <div class="vm-products-page__skeleton-row"></div>
+      }
+    </div>
+  } @else if (store.products().length === 0) {
+    <vm-empty-state
+      title="No products yet"
+      message="Add a product, or reload from the external catalogue to get started."
+    >
+      <span empty-state-icon aria-hidden="true">📦</span>
+      <vm-button empty-state-action (click)="openCreate()">Add product</vm-button>
+    </vm-empty-state>
+  } @else {
+    <vm-product-table
+      [products]="store.products()"
+      [busy]="store.busy()"
+      (edit)="openEdit($event)"
+      (remove)="requestDelete($event)"
+    />
+  }
+
+  <details class="vm-products-page__external" (toggle)="onExternalCatalogueToggle($event)">
+    <summary>External catalogue (read-only)</summary>
+    @if (externalCatalogueError()) {
+      <p class="vm-products-page__external-error">{{ externalCatalogueError() }}</p>
+    } @else if (externalCatalogue(); as catalogue) {
+      <p class="vm-products-page__external-hint">
+        The mock external resource this machine was seeded from. It is read-only —
+        this screen's CRUD never writes back to it.
+      </p>
+      <ul class="vm-products-page__external-list">
+        @for (item of catalogue; track item.id) {
+          <li>{{ item.name }} — {{ item.priceCents | centsToCurrency }}</li>
+        }
+      </ul>
+    } @else {
+      <p>Loading…</p>
+    }
+  </details>
+</div>
+
+<vm-product-form-dialog
+  [open]="formOpen()"
+  [product]="editingProduct()"
+  [existingProducts]="store.products()"
+  [serverError]="formError()"
+  [saving]="store.busy()"
+  (save)="onSave($event)"
+  (closed)="onFormClosed()"
+/>
+
+<vm-confirm-dialog
+  [open]="deleteTarget() !== null"
+  title="Delete product?"
+  [message]="deleteMessage()"
+  confirmLabel="Delete"
+  [danger]="true"
+  (confirmed)="onDeleteConfirmed()"
+  (closed)="onDeleteClosed()"
+/>
+
+<vm-confirm-dialog
+  [open]="reloadConfirmOpen()"
+  title="Reload from external catalogue?"
+  message="This discards any unsaved changes to the product list and restores it from the external catalogue. The external catalogue itself is never modified."
+  confirmLabel="Reload"
+  (confirmed)="onReloadConfirmed()"
+  (closed)="onReloadConfirmClosed()"
+/>
