@@ -9,7 +9,8 @@ the same commit as the work it describes. Rules: `CLAUDE.md` §7.
 
 ## Next up
 
-1. `P9-1` … `P9-9` — polish, verification, handover
+1. `P9-1` … `P9-9` — polish, verification, handover (now running against the
+   post-service-layer-refactor code — see the new phase above P9)
 
 ## Open questions
 
@@ -34,17 +35,32 @@ log for the scope-boundary calls (name/price uniqueness live in P3, not here).
 **Reopened** before P3 for an aggregate-root restructuring — see `P1-6`…`P1-8`
 below and the decision log. `CoinBundle`/`P1-3` superseded.
 
+- [-] `P1-1` `Product` entity's own guards (`Create`/`Restore` validating
+      name/price) — **superseded by the service-layer refactor** (2026-09-18,
+      see decision log): moved to `ProductValidationService`; `Product` is now
+      plain data with no factories or validation of its own.
 - [x] `P1-6` `Slot` entity (product + quantity, `Dispense`/`Restock`);
-      `Quantity` removed from `Product`, which is now pure catalogue data
+      `Quantity` removed from `Product`, which is now pure catalogue data —
+      **superseded by the service-layer refactor** (2026-09-18): `Dispense`/
+      `Restock`'s validation moved to `ProductValidationService`/`VendingService`;
+      `Slot` is now plain data.
 - [-] `P1-3` `CoinBundle` immutable value object — **superseded by `P1-8`**:
       the aggregate root makes rollback (and therefore persistent/immutable
       coin collections) unnecessary; replaced by mutable `CoinInventory`
 - [x] `P1-7` `VendingMachine` aggregate root: owns slots, bank and session;
       compute-then-commit `Purchase` (no rollback code); `Reset`; slot CRUD
       for P3; id-uniqueness/price-distinctness enforced across slots;
-      `IChangeCalculator`/`ChangeResult` declared (not implemented — P2)
+      `IChangeCalculator`/`ChangeResult` declared (not implemented — P2) —
+      **superseded by the service-layer refactor** (2026-09-18): all behaviour
+      (`Purchase`/`InsertCoin`/`Reset`/slot CRUD/uniqueness enforcement) moved
+      to `VendingService`/`ProductService`/`MachineStateService`/
+      `ProductValidationService`; `VendingMachine` is now plain data (slots +
+      bank + session), no longer an aggregate root in the DDD sense.
 - [x] `P1-8` `CoinInventory` mutable entity, replacing `CoinBundle`, used for
-      both the bank and the session's inserted coins
+      both the bank and the session's inserted coins — **superseded by the
+      service-layer refactor** (2026-09-18): `Add`/`Remove`/`AddAll`/`From`
+      and their validation moved to `VendingService`/`MachineStateService`;
+      `CoinInventory` is now a plain `Counts` dictionary wrapper.
 
 ### P2 — Change calculation `[x]`
 
@@ -54,6 +70,12 @@ larger-denomination tie-break), `ChangeResult` `Made`/`NotPossible`
 factories, the named 60c-from-{50:1,20:3} greedy-counterexample proof, 13
 tests incl. a Stopwatch performance test. `P2-1`…`P2-5` all done — see
 decision log for the algorithm/tie-break reasoning.
+
+- [-] `P2-2` `BoundedChangeCalculator` implemented inside `VM.Server.Domain/Services`
+      — **superseded by the service-layer refactor** (2026-09-18, see decision
+      log): moved verbatim (same DP, same comment) to
+      `VM.Server.Service.Vending.ChangeCalculationService`; `Domain/Services`
+      no longer exists. The algorithm and its 13 tests are unchanged.
 
 ### P3 — Service layer: products `[x]`
 
@@ -148,6 +170,57 @@ sticky-panel-overlap findings.
       16/0/15, `DUPLICATE_PRICE` on the price field with values preserved,
       the price round-trip through the real dialog) + 7 store specs
       (create/update/delete/reload without refetch, busy guard)
+
+### Service-layer refactor (backend, run before P9) `[x]`
+
+Not part of `IMPLEMENTATION_PLAN.md`'s original phase numbering — an explicit
+repo-owner request to flatten `VM.Server.Domain` to pure data and move every
+rule/calculation/state transition into `VM.Server.Service`, executed after P8
+and before P9 (P9 verifies final state, so it needed to run against the
+post-refactor code). Task ids below are new (`R-1`…`R-6`, not `P`-numbered,
+to avoid colliding with or renumbering the real plan); the domain tasks it
+supersedes (`P1-1`, `P1-6`, `P1-7`, `P1-8`, `P2-2`) are marked `[-]` in place
+above, not deleted.
+
+- [x] `R-1` Flattened `Product`/`Slot`/`CoinInventory`/`VendingMachine`/
+      `PurchaseResult` to plain data carriers (public properties, `internal set`
+      on mutable ones, no factories/guards/behaviour methods); deleted
+      `Domain/Services/` (`BoundedChangeCalculator`/`ChangeResult`/
+      `IChangeCalculator`) entirely. Added `Domain/AssemblyInfo.cs`
+      (`InternalsVisibleTo` scoped to `VM.Server.Service`/`VM.Server.Repository`/
+      `VM.Server.Service.Tests` only) so the API layer cannot bypass a service
+      by assigning a property directly. `CoinDenominations`/`ErrorCodes`/
+      `DomainException` kept as-is (already pure data).
+- [x] `R-2` `ChangeCalculationService` (Service/Vending) — the DP algorithm
+      moved verbatim, same greedy-counterexample comment, implementing a new
+      `IChangeCalculator` now owned by Service.
+- [x] `R-3` `ProductValidationService` (Service/Products) — name/price/quantity
+      validation plus `EnsureUnique` (id/name-ci/price, previously the
+      aggregate's `EnsureSlotInvariants`), the one place every product/slot
+      rule lives.
+- [x] `R-4` `MachineStateService` (Service/State, new folder — chosen over
+      folding into the store so the store stays purely mechanical) —
+      `LoadMachineAsync`: pulls the catalogue, validates/seeds the bank,
+      assigns every slot the configured initial quantity, enforces uniqueness
+      across the whole set. `InMemoryVendingMachineStore` now only owns *when*
+      to load (lazy/`SemaphoreSlim`-guarded/reload), not *how*.
+- [x] `R-5` `VendingService` rewritten to own `InsertCoin`/`Purchase`/`Reset`
+      directly against the plain-data `VendingMachine`, preserving the
+      compute-then-commit `Purchase` ordering exactly (find slot → check
+      stock → check funds → compute change → mutate only once all four pass) —
+      still no rollback code anywhere. `ProductService` rewritten to delegate
+      every rule to `ProductValidationService` before mutating `machine.Slots`
+      directly.
+- [x] `R-6` Deleted `VM.Server.Domain.Tests` and `VM.Server.API.Tests`
+      (removed from `VM.Server.slnx`); ported every behavioural assertion into
+      `VM.Server.Service.Tests` against the new service APIs — see decision
+      log for the two cases that couldn't be ported as-is and why, and for the
+      API-test-coverage trade-off now on the record. 85 tests total, all
+      green; solution-wide `dotnet build` clean (0 warnings — `TreatWarningsAsErrors`
+      still holds). Full curl happy path re-run live and diffed against the P5
+      baseline (denominations/products/insert/session/purchase/insert/reset/
+      404/422) — byte-identical apart from fresh GUIDs, confirming no
+      behaviour change.
 
 ### P9 — Polish, verification, handover `[ ]`
 
@@ -601,6 +674,72 @@ Format: `YYYY-MM-DD — decision — why — alternatives rejected`
   has no natural response body to promise since its entire job is
   discarding state, not returning it (callers needing the refreshed list
   already have `GET /api/products` for that).
+- `2026-09-18` — **Explicit repo-owner request: flatten `VM.Server.Domain` to
+  pure data and move every rule/calculation/state transition into
+  `VM.Server.Service`.** Honest accounting, gains and losses:
+  - **Gains**: one place per concern (`ProductValidationService` for every
+    product/slot rule, `ChangeCalculationService` for the DP, `VendingService`
+    for the state transitions, `MachineStateService` for what "loading" means)
+    instead of rules scattered across `Product`/`Slot`/`CoinInventory`/
+    `VendingMachine`'s own methods; a reviewer now reads *all* business rules
+    in one project instead of hunting through Domain entities too. Tests
+    consolidate the same way — one test project instead of three.
+  - **What it gives up**: **Domain entities can no longer enforce their own
+    invariants.** Before this refactor, `Product.Create(name, -5)` or
+    `Slot.Create(product, 99)` was *impossible to construct* — the invalid
+    state literally could not exist as an object. After it, `new Product { Id
+    = x, PriceCents = -5 }` compiles and runs fine; the entity itself asserts
+    nothing, offers no self-protection, and would silently hold nonsense data
+    if some future code path skipped `ProductValidationService`. `internal
+    set` plus `InternalsVisibleTo` narrows *who* can mutate (only
+    `VM.Server.Service`/`VM.Server.Repository`/their tests) but does not
+    *validate* anything — it is a visibility fence, not a guard. This is a
+    real trade of type-level safety for a simpler, more centralised call
+    graph; it is the correct trade only because every current caller of these
+    entities' setters is a Service-layer class that is disciplined about
+    calling `ProductValidationService`/`ChangeCalculationService` first — a
+    new caller added carelessly inside `VM.Server.Service` itself would not
+    be caught by the compiler the way it used to be.
+  - **What it also gives up**: deleting `VM.Server.API.Tests` (per explicit
+    instruction, its behavioural assertions ported into `VM.Server.Service.Tests`)
+    removes the only coverage of route spelling, JSON wire-shape (property
+    names, casing), the `DomainException.Code` → HTTP status mapping in
+    `ExceptionHandlingMiddleware`, and DI/composition-root wiring
+    (`AddVendingMachineBackend` actually resolving at the ASP.NET level). None
+    of that is business logic, so none of it belongs in
+    `VM.Server.Service.Tests` by this task's own scope — but it is real
+    coverage that existed and now doesn't. A route typo, a JSON casing
+    regression, or a status-code mapping mistake would currently only be
+    caught by the manual `curl` pass this refactor ran once, not by any
+    automated test. Flagged here rather than silently accepted.
+  - **Two test cases that could not be ported as literal equivalents** (both
+    exercised guard methods that no longer exist as public throwing APIs):
+    `CoinInventory.Remove_MoreThanAvailable_ThrowsDomainException` — the
+    invariant it protected (the bank can never be asked to pay out more of a
+    denomination than it holds) is now guaranteed by construction:
+    `ChangeCalculationService`'s DP bounds every returned count by the
+    availability it was given (proved by
+    `Calculate_ForARangeOfAmounts_OnSuccessCoinsSumExactlyAndRespectAvailability`),
+    and `VendingService.Purchase` only ever asks it to remove coins after
+    merging the inserted coins into the bank first — so a bank underflow is
+    now provably unreachable rather than defended against at the point of
+    removal. `CoinInventory.ToSnapshot_ReturnsADefensiveCopy` — `CoinInventory`
+    no longer offers a snapshot method; it's a plain `Dictionary<int,int>`
+    property, and callers that need an immutable view (the atomicity tests)
+    just copy it themselves (`new Dictionary<int,int>(machine.Bank.Counts)`).
+  - **Alternatives rejected**: keeping denomination-acceptance *validation*
+    (not the plain data-lookup `CoinDenominations.IsAccepted`) as a
+    throwing guard inside `Domain` — rejected because it's a business rule
+    (turns "not in the list" into `INVALID_DENOMINATION`), and the task's own
+    instruction was that Domain has zero guards; it now lives in
+    `VendingService.InsertCoinAsync` and (duplicated, ~6 lines) in
+    `MachineStateService` for validating the configured coin bank at load
+    time — accepted as a small, deliberate duplication rather than inventing
+    a sixth service the task didn't ask for. Folding `MachineStateService`
+    into `InMemoryVendingMachineStore` instead of a separate Service-layer
+    class — rejected because it would leave "what loading means" (uniqueness
+    enforcement, initial-quantity assignment) inside `Repository`, which the
+    task says should be mechanical only.
 
 ---
 
@@ -991,3 +1130,50 @@ needs to know.
   didn't exist, causing a 404 the moment a product without an image was
   rendered — added a simple placeholder SVG matching the seed assets' style
   (see decision log). Closes P8. Next: P9 (polish, verification, handover).
+- `2026-09-18` — Service-layer refactor (backend only, run before P9 per
+  explicit repo-owner request): flattened `Product`/`Slot`/`CoinInventory`/
+  `VendingMachine`/`PurchaseResult` to plain data (`internal set` + a new
+  `Domain/AssemblyInfo.cs` scoping `InternalsVisibleTo` to
+  `VM.Server.Service`/`VM.Server.Repository`/`VM.Server.Service.Tests`);
+  deleted `Domain/Services/` entirely. Moved its contents plus every rule
+  that used to live on the flattened entities into `VM.Server.Service`:
+  `ChangeCalculationService` (DP moved verbatim), `ProductValidationService`
+  (name/price/quantity/uniqueness — the one place for every product rule),
+  `MachineStateService` (new `Service/State/` folder — loading/reload logic,
+  chosen over folding into the store so `InMemoryVendingMachineStore` stays
+  mechanical), and a rewritten `VendingService`/`ProductService` that mutate
+  the plain-data `VendingMachine` directly. Preserved `Purchase`'s
+  compute-then-commit ordering exactly (find slot → stock → funds → change →
+  mutate only once all four pass) — still no rollback code anywhere, proven
+  by a re-verified atomicity test that snapshots slots/bank/session before
+  and after every refusal reason (`OUT_OF_STOCK`/`INSUFFICIENT_FUNDS`/
+  `CHANGE_UNAVAILABLE`/`PRODUCT_NOT_FOUND`). Deleted `VM.Server.Domain.Tests`
+  and `VM.Server.API.Tests` (removed from `VM.Server.slnx`); ported every
+  behavioural assertion into `VM.Server.Service.Tests` against the real
+  service APIs, including the named greedy-counterexample proof, the
+  200-coin performance test, all boundary tables, and the atomicity proof —
+  two cases (`CoinInventory`'s own `Remove`/`ToSnapshot` guard tests) could
+  not be ported as literal equivalents since the methods they exercised no
+  longer exist as public APIs; see the decision log for why the invariants
+  they protected are still provably held. 85 tests total, all green;
+  solution-wide `dotnet build` clean, 0 warnings (`TreatWarningsAsErrors`
+  still holds — no new packages, no MediatR/FluentValidation). Re-ran the
+  full P5 manual curl verification live end to end (denominations → insert
+  100/50/20 → session 170 → purchase Water 85c → paid 170/change 85 = 50+20+
+  10+5/quantity 10→9 → insert 200/10 → reset → session empty → 404
+  `PRODUCT_NOT_FOUND`, plus a second instance started with an empty coin
+  bank via env-var config override to force a live 422 `CHANGE_UNAVAILABLE`
+  with the session left untouched) and confirmed every response matches the
+  P5 baseline exactly (same shapes, same codes, same status codes — only the
+  product GUIDs differ, as expected). Updated `CLAUDE.md` §2.3/§2.4/§2.5/
+  §2.6/§4.1/§4.2/§4.3 to describe the new layout and to mark the
+  entity-enforced invariants as now service-enforced. Marked `P1-1`/`P1-6`/
+  `P1-7`/`P1-8`/`P2-2` `[-]` superseded in place (history kept, not deleted).
+  Being honest about the trade-off: Domain entities can no longer enforce
+  their own invariants (a real loss of type-level safety, mitigated only by
+  `internal set` narrowing *who* can mutate, not validating *what* gets
+  written), and deleting `VM.Server.API.Tests` removes all coverage of route
+  spelling, JSON wire-shape, the error-code-to-HTTP-status mapping, and DI
+  wiring — see the decision log for the full accounting. Does not touch the
+  frontend. Next: P9 (polish, verification, handover), now running against
+  this post-refactor backend.
