@@ -9,10 +9,9 @@ the same commit as the work it describes. Rules: `CLAUDE.md` §7.
 
 ## Next up
 
-1. `P6-2`, `P6-3` — API DTOs and `ProductsApiService`/`VendingApiService`,
-   unblocked now the contract is frozen
-2. `P6-8` — the API-service half of this (pipe tests already exist)
-3. `P7-1` … `P7-9` — vending UI
+1. `P7-1` … `P7-9` — vending UI
+2. `P8-1` … `P8-7` — products admin UI
+3. `P9` — polish, verification, handover
 
 ## Open questions
 
@@ -163,28 +162,16 @@ refactor already absorbed most of it. See decision log.
       `src/vm-client/public/assets/products/`, one per `catalogue.seed.json`
       `imageUrl` — confirmed every path resolves
 
-### P6 — Frontend foundation `[~]`
+### P6 — Frontend foundation `[x]`
 
-`P6-5`/`P6-6`/`P6-7` pulled forward ahead of `P1`…`P5` since they don't touch
-the API contract (no models, no HTTP calls). `P6-1`/`P6-4` pulled forward the
-same way — environments and the error interceptor are pure client-side
-plumbing that doesn't need P5 either. `P6-9` (shared UI primitives) is a new
-task, pulled forward from what P7/P8 will need, for the same contract-free
-reason. Only `P6-2`/`P6-3`/`P6-8` remain, and all three are genuinely blocked
-on the `P5` contract (they mirror/call the actual API DTOs).
-
-- [x] `P6-1` environments + `apiBaseUrl`
-- [ ] `P6-2` Models mirroring API DTOs
-- [ ] `P6-3` `ProductsApiService`, `VendingApiService`
-- [x] `P6-4` Error interceptor + `ERROR_MESSAGES`
-- [x] `P6-5` `centsToCurrency` pipe
-- [x] `P6-6` `_tokens.scss`, `_mixins.scss`, `_reset.scss`, dark mode
-- [x] `P6-7` App shell + lazy routes `/` and `/products`
-- [ ] `P6-8` Pipe + API service tests (pipe tests already exist from `P6-5`;
-      the API-service half is still blocked on `P6-3`)
-- [x] `P6-9` Shared UI primitives (`vm-button`, `vm-badge`, `vm-modal`,
-      `vm-confirm-dialog`, `vm-empty-state`) — pulled forward from P7/P8's
-      dependencies
+Environments, models (`product.model.ts`/`coin.model.ts`), three API services
+(`Products`/`Vending`/`ExternalCatalogApiService`), error interceptor +
+`ERROR_MESSAGES`, `centsToCurrency` pipe, SCSS token system, app shell +
+lazy routes, five `shared/ui` primitives. `P6-1`…`P6-9` all done — most
+pulled forward of `P1`…`P5` since they're contract-independent (see decision
+log); `P6-2`/`P6-3`/`P6-8` done last once `P5` froze the contract, verified
+against the real DTOs/live OpenAPI doc/curl responses, not `CLAUDE.md` §3
+alone (see decision/session log for the `insertedCoins` field-name finding).
 
 ### P7 — Vending UI `[ ]`
 
@@ -496,6 +483,27 @@ Format: `YYYY-MM-DD — decision — why — alternatives rejected`
   rejected adding the Swashbuckle package (violates "no new packages") and
   rejected downgrading the README's claim to describe raw JSON only, when a
   real UI was achievable for free.
+- `2026-09-17` — **Frontend models for P6-2 use `insertedCoins` for
+  `VendingSession`**, not the `coins` name that task's own spec assumed —
+  confirmed by reading `SessionDto` (`Service/Vending/SessionDto.cs`), the
+  live OpenAPI schema, and a real `GET /api/vending/session` response, all
+  three agreeing on `insertedCoins`. This is the one place the source of
+  truth (actual wire format) disagreed with an assumption written into the
+  task prompt itself, not with `CLAUDE.md` — the client models the wire
+  shape exactly regardless of what a prompt guessed a field would be called.
+  Added the previously-undocumented `GET /api/vending/session` payload to
+  `CLAUDE.md` §3.2 while here, since it was the one endpoint response shape
+  never actually written down.
+- `2026-09-17` — **The live OpenAPI document is served at `/openapi/v1.json`,
+  not `/swagger/v1/swagger.json`** (that path 404s; the CDN Swagger UI page
+  built in P5 lives at `/swagger` and fetches the JSON from the correct URL
+  itself) — a wrong guess in the task prompt, not a `CLAUDE.md` or code
+  defect, so no doc change needed; noted here only so a future session
+  doesn't repeat the wrong URL. Every schema in the real document
+  (`SessionDto`, `ProductDto`, `PurchaseResultDto`, `ReturnedCoinsDto`,
+  `CoinCountDto`, `ErrorResponseDto`, `ExternalProductDto`, both product
+  request DTOs) matches the C# source exactly — confirmed no doc/code drift
+  beyond the `insertedCoins` finding above.
 - `2026-09-16` — **`POST /api/products/reload` and the `DELETE`/create
   actions return `204 No Content`/`201 Created` respectively**, choices
   `CLAUDE.md` §3 doesn't pin down explicitly (only the purchase/reset
@@ -721,3 +729,35 @@ needs to know.
   README's routes and Swagger claim already matched exactly - no changes
   needed. Closes P5. Next: P6-2/P6-3 (frontend API services), now
   unblocked.
+- `2026-09-17` — P6-2/P6-3/P6-8, closing P6: read the real DTOs
+  (`ErrorCodes.cs`, `ProductDto`, `ExternalProductDto`, `CoinCountDto`,
+  `SessionDto`, `PurchaseResultDto`, `ReturnedCoinsDto`, the four request
+  records) rather than modelling off `CLAUDE.md` §3 alone, then started the
+  backend and cross-checked against both the live OpenAPI document and real
+  curl responses for every route (denominations, catalog, products, session,
+  insert, purchase, reset, plus six error codes: `INVALID_DENOMINATION`,
+  `PRODUCT_NOT_FOUND`, `DUPLICATE_PRODUCT`, `DUPLICATE_PRICE`,
+  `INVALID_QUANTITY`, `INVALID_PRICE`). All three sources agreed with each
+  other; the one real disagreement was with the task prompt's own assumed
+  field name (see decision log — `insertedCoins`, not `coins`). Added
+  `core/models/product.model.ts` (`Product`, `CatalogueProduct`,
+  `CreateProductRequest`, `UpdateProductRequest`) and `core/models/coin.model.ts`
+  (`CoinCount`, `VendingSession`, `PurchaseResult`, `ResetResult`) — plain
+  interfaces, no classes, no mapping layer. `ErrorCode` (built in the earlier
+  P6-1/P6-4 session) already covered all ten `ErrorCodes.cs` codes exactly;
+  `ERROR_MESSAGES satisfies Record<ErrorCode, string>` still compiled with no
+  changes needed. Added `core/api/api-paths.ts` (one `API_PATHS` constant,
+  every route in one place) and three thin `providedIn: 'root'` services
+  (`ProductsApiService`, `VendingApiService`, `ExternalCatalogApiService`,
+  the last one new — P8's reload UI needs to show what the external catalog
+  holds), each method one typed `HttpClient` call, no caching/state/retry.
+  14 new tests via `HttpTestingController` (URL, verb, request body, typed
+  response for every method), plus two tests proving the P6-4 interceptor and
+  these services compose correctly end-to-end: a 409 `DUPLICATE_PRODUCT` and
+  a 422 `CHANGE_UNAVAILABLE` both arrive at the caller as a normalised
+  `ApiError` with the code intact. `lint`/`build`/`test:ci` all green
+  (59/59). Reloaded the backend's in-memory state (`POST
+  /api/products/reload`) after the manual verification to undo the test
+  product/purchases before stopping. Fixed one real doc gap: `CLAUDE.md` §3.2
+  never showed the `GET /api/vending/session` payload — added it. Closes P6.
+  Next: P7 (vending UI).
