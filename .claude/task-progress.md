@@ -233,6 +233,34 @@ above, not deleted.
 - [ ] `P9-7` *(optional)* Docker + compose
 - [ ] `P9-8` *(optional)* GitHub Actions CI
 - [ ] `P9-9` Final pass over this file
+- [x] `P9-10` `vm-button` gained a `warning` variant (filled light-yellow/dark
+      text, muted amber in dark mode) and three new tokens
+      (`--warning-surface`/`--warning-border`/`--warning-text`, both themes);
+      wired to the products-admin Edit button (table row + mobile card, both
+      layouts) so it no longer reads as inactive next to Delete. Text/fill
+      contrast 8.54:1 light, 8.38:1 dark — both measured from the live
+      page's own computed styles, not assumed from the token values on
+      paper
+- [x] `P9-11` `vm-modal` centering fixed at the primitive (both the
+      add-product and reload-from-catalogue dialogs share the fix): the
+      global reset's `* { margin: 0 }` was silently cancelling native
+      `<dialog>`'s own UA-stylesheet `margin: auto` centering — reasserted
+      on `.vm-modal`. `max-height` moved from a `vh`-based calc to `85dvh`.
+      Found and fixed two knock-on bugs while verifying live, neither of
+      which would have been caught by inspection alone: (1) `.vm-modal__panel`'s
+      `max-height: 100%` silently resolved to nothing against the dialog's
+      `auto` height (percentage heights need a *definite*-height ancestor),
+      so the footer overflowed past the dialog's own bottom edge instead of
+      the body scrolling internally — fixed by making `.vm-modal[open]` a
+      flex container so the panel stretches via flex sizing instead; (2)
+      that fix's first attempt (`display: flex` unscoped) made every
+      *closed* dialog render inline in the page, since an unscoped author
+      rule beats the UA stylesheet's `dialog:not([open]) { display: none }`
+      regardless of specificity — rescoped to `.vm-modal[open]`. Skipped the
+      "two vending-page buttons" item from the same request — investigated
+      the page and found `vm-product-card` has exactly one button, no clean
+      pair of "two buttons on a card" exists; repo owner said to skip it
+      rather than guess
 
 ---
 
@@ -740,6 +768,45 @@ Format: `YYYY-MM-DD — decision — why — alternatives rejected`
     class — rejected because it would leave "what loading means" (uniqueness
     enforcement, initial-quantity assignment) inside `Repository`, which the
     task says should be mechanical only.
+- `2026-09-18` — **`vm-modal` fixed at the primitive for centering, not
+  patched at each call site** — the add-product and reload-from-catalogue
+  dialogs are both `vm-modal`; the actual bug (global reset's
+  `* { margin: 0 }` cancelling native `<dialog>`'s own `margin: auto`
+  centering) lives one level below either dialog, so the only correct fix
+  is in the shared primitive — rejected adding `margin: auto` (or worse, a
+  `position`/`transform` override) to each dialog's own host styles, which
+  would have "fixed" both call sites while leaving the primitive itself
+  broken for the next dialog someone adds.
+- `2026-09-18` — **`.vm-modal__panel`'s height comes from flexbox stretch
+  (`.vm-modal[open] { display: flex }` + `min-height: 0` on the panel), not
+  a percentage height** — found live, not by inspection: `max-height: 100%`
+  on the panel silently resolved to `none` because its ancestor (`.vm-modal`)
+  has no *definite* `height`, only `max-height` (a CSS percentage-height
+  rule, not an Angular bug) — the panel had no real height limit at all, and
+  its last child (the footer) rendered past the dialog's own bottom edge
+  instead of the body scrolling internally. Flexbox stretch sizing resolves
+  correctly against an auto/max-height flex container in a way percentage
+  heights do not — rejected giving the panel an explicit pixel/dvh height
+  (would need to exactly duplicate the dialog's own `85dvh` and drift the
+  moment one changed without the other).
+- `2026-09-18` — **The flex fix is scoped to `.vm-modal[open]`, not bare
+  `.vm-modal`** — the first attempt (`display: flex` on the plain class)
+  made every *closed* dialog render inline in the page: author styles
+  always win over User-Agent styles regardless of specificity, so an
+  unscoped `display: flex` silently overrode the browser's own
+  `dialog:not([open]) { display: none }` default. Caught live by a
+  full-page screenshot showing the (closed) reload-confirmation dialog's
+  text sitting in the normal page flow beneath the products table —
+  rejected trusting the earlier isolated centering/sizing checks alone,
+  which only ever looked at the *open* dialog and would never have
+  surfaced this.
+- `2026-09-18` — **Skipped the "two buttons on the vending-page cards"
+  request** rather than guessing — investigated the actual page first, as
+  instructed: `vm-product-card` has exactly one button (Buy, already
+  dynamically primary/secondary by affordability); the only other
+  persistent action button on the page is `vm-coin-slot`'s "Return coins",
+  which isn't inside a card at all. Asked which pair was meant; repo owner
+  said to skip it. No `vm-button` or template changes made for this part.
 
 ---
 
@@ -1177,3 +1244,68 @@ needs to know.
   wiring — see the decision log for the full accounting. Does not touch the
   frontend. Next: P9 (polish, verification, handover), now running against
   this post-refactor backend.
+- `2026-09-18` — Four small frontend fixes requested ahead of the P9 pass
+  (`P9-10`/`P9-11`); one (`vm-button` `warning` variant) done fully, one
+  (`vm-modal` centering) done and expanded once live verification surfaced
+  two real knock-on bugs, one skipped on the repo owner's instruction after
+  I investigated and asked rather than guessed (see decision log for all
+  three). `P9-10`: added `warning` to `ButtonVariant`, three tokens in both
+  themes, wired to the products-admin Edit button (table row and mobile
+  card). `P9-11`: `vm-modal` centering, `max-height` moved to `85dvh`, plus
+  the panel-overflow and closed-dialog-visibility fixes found live (see
+  decision log) — neither would have been caught by lint, build, or the
+  existing test suite, since none of them exercise real geometry or the
+  UA/author-style cascade.
+
+  `lint`/`build` green; `test:ci` 124/124 (1 new: the `warning` variant
+  class). Grepped both changed component stylesheets for hex codes,
+  `rgb()`/`rgba()`, and `px` spacing values — zero hits beyond the
+  pre-existing 1-2px border/outline widths (not spacing-scale values, same
+  as every other primitive in `shared/ui`).
+
+  Manual verification, backend running, all done live:
+  - **Edit button contrast**: read the live computed `background-color`/
+    `color` off the actual rendered button (not the token values on paper)
+    in both themes — light 8.54:1, dark 8.38:1, both far past the 4.5:1
+    requirement. Screenshots of both themes saved.
+  - **Modal centering**: measured the actual dialog's left/right and top/
+    bottom gutters against the viewport at 320/375/768/1440px — horizontally
+    and vertically centered (gutters equal within rounding) at every width,
+    and fully within the viewport bounds at every width. The
+    reload-from-catalogue confirm dialog checked separately at 768px to
+    confirm the primitive-level fix covers both dialogs, not just the one
+    tested first.
+  - **Many validation errors still fit**: triggered all three of the
+    product form's validators at once (empty name, unparseable price,
+    quantity 16) at 375×700 — before the panel-sizing fix this measurably
+    pushed the footer 48px past the dialog's own bottom edge (caught via
+    `getBoundingClientRect()`, not visually); after the fix the panel's
+    height exactly matches the dialog's, the footer is fully visible, and
+    the body is measurably scrollable (`scrollHeight` 456 vs `clientHeight`
+    408). Screenshot saved showing all three inline errors with the footer
+    still pinned and visible.
+  - **Focus trap / Escape / restore**: an isolated check (fresh page load,
+    nothing else open first) confirmed 15 successive Tabs never left the
+    dialog, Escape closed it, and focus returned to the exact trigger
+    button handle captured before opening — all still intact after the
+    centering/sizing changes. (A combined run of every check in one script
+    showed a false "focus not restored" because an earlier section in that
+    *same script* had left a dialog open without closing it first — a
+    test-harness ordering bug, not a product regression; resolved by
+    re-running the check in isolation.)
+  - **Closed dialogs stay hidden**: read every `dialog.vm-modal`'s
+    `open`/computed-`display` at page load with nothing open — all three
+    (product form, delete confirm, reload confirm) correctly `open: false`/
+    `display: none`; a full-page screenshot confirmed no stray dialog
+    content bleeds into the page layout.
+
+  Backend state confirmed unchanged after verification (still the 6-product
+  seed) — none of the scripted checks completed a real form submission.
+  Two separate commits, scope `ui`: the button variant, and the modal fix
+  (they're unrelated changes, per the task's own instruction). Left
+  `angular.json`'s stray `"analytics": false` addition (an Angular-CLI-
+  written line, not something I changed) out of both commits — unrelated to
+  this task. A large, unrelated backend service-layer refactor was
+  mid-flight in the working tree from a concurrent session throughout this
+  turn; staged only the exact frontend files touched here, never a broad
+  `git add`, so none of it is in either commit.

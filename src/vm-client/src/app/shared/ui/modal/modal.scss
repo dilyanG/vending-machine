@@ -1,13 +1,36 @@
 .vm-modal {
+  // Native <dialog> centres itself via the UA stylesheet's `margin: auto`
+  // (it sits `position: fixed; inset-block: 0` with an intrinsic size, so
+  // auto margins split the leftover space evenly on every side). The global
+  // reset's `* { margin: 0 }` overrides that with higher specificity than
+  // the UA default, so it has to be reasserted here — restoring it, not
+  // adding a second positioning mechanism on top.
+  margin: auto;
   width: 100%;
   max-width: min(var(--measure-max-width), calc(100vw - var(--space-8)));
-  max-height: calc(100vh - var(--space-8));
+  max-height: 85dvh;
   padding: 0;
   border: none;
   border-radius: var(--radius-lg);
   background: var(--surface);
   color: var(--text);
   box-shadow: var(--shadow-lg);
+}
+
+// display: flex (scoped to [open]) so .vm-modal__panel can stretch to fill
+// this box via flex sizing. A plain `height: 100%` on the panel would not
+// work here: this element has no explicit `height`, only `max-height`, and
+// CSS percentage heights only resolve against an ancestor with a *definite*
+// height — with an auto-height ancestor a percentage max-height computes to
+// none, so the panel silently had no height limit at all and its content
+// (the footer) overflowed past the dialog's own bottom edge instead of
+// scrolling. Scoped to [open]: an unscoped `display: flex` on `.vm-modal`
+// is an author style, which always beats the UA stylesheet's
+// `dialog:not([open]) { display: none }` regardless of specificity —
+// setting it unconditionally would make every *closed* dialog render
+// inline in the page instead of staying hidden.
+.vm-modal[open] {
+  display: flex;
 }
 
 .vm-modal::backdrop {
@@ -17,7 +40,10 @@
 .vm-modal__panel {
   display: flex;
   flex-direction: column;
-  max-height: calc(100vh - var(--space-8));
+  // min-height: 0 lets this flex item shrink to the dialog's actual
+  // (max-height-clamped) size instead of growing to its content's height.
+  min-height: 0;
+  width: 100%;
 }
 
 .vm-modal__header {
@@ -32,6 +58,11 @@
 }
 
 .vm-modal__body {
+  // min-height: 0 overrides a flex item's default min-height: auto, which
+  // otherwise refuses to shrink below its content's intrinsic height —
+  // without it, a tall body (e.g. a form showing several validation
+  // errors) pushes the footer off-screen instead of scrolling internally.
+  min-height: 0;
   padding: var(--space-5);
   overflow-y: auto;
   color: var(--text);
