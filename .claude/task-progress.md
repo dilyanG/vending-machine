@@ -173,9 +173,15 @@ log); `P6-2`/`P6-3`/`P6-8` done last once `P5` froze the contract, verified
 against the real DTOs/live OpenAPI doc/curl responses, not `CLAUDE.md` §3
 alone (see decision/session log for the `insertedCoins` field-name finding).
 
-### P7 — Vending UI `[ ]`
+### P7 — Vending UI `[~]`
 
-- [ ] `P7-1` `vending.store` signal store
+- [x] `P7-1` `vending.store` signal store (`core/state/vending.store.ts`) —
+      private writable signals, public `.asReadonly()` views; `busy` gates
+      `insertCoin`/`purchase`/`reset` so a double-click never fires two
+      requests; `purchase`/`reset` apply the response in place (patch the
+      product, zero the session) rather than refetching; `canAfford` is a
+      plain method (not `computed()`, which cannot take an argument) reading
+      `insertedTotal`/`products` for UX only
 - [ ] `P7-2` `machine-display` (`aria-live`)
 - [ ] `P7-3` `coin-slot` from API denominations
 - [ ] `P7-4` `product-grid` + `product-card`
@@ -183,7 +189,13 @@ alone (see decision/session log for the `insertedCoins` field-name finding).
 - [ ] `P7-6` Return-coins / reset
 - [ ] `P7-7` Responsive layout 1/2/3/4 columns, sticky coin panel on mobile
 - [ ] `P7-8` Loading / empty / error states
-- [ ] `P7-9` Store tests
+- [~] `P7-9` Store half done — 8 specs: insert accumulates, busy guards all
+      three mutating actions (not just purchase, per its own reasoning), a
+      successful purchase patches the product and zeroes the session, a
+      failed purchase leaves `insertedTotal` untouched and sets `error`,
+      reset clears the session and populates `lastReturn`, inserting a coin
+      clears a previous `lastPurchase`/`error`, `canAfford`. Still needs the
+      `vm-product-card` stock-state test.
 
 ### P8 — Products admin UI `[ ]`
 
@@ -761,3 +773,21 @@ needs to know.
   product/purchases before stopping. Fixed one real doc gap: `CLAUDE.md` §3.2
   never showed the `GET /api/vending/session` payload — added it. Closes P6.
   Next: P7 (vending UI).
+- `2026-09-17` — Started P7 (vending UI), store first (`P7-1`/half of
+  `P7-9`): `core/state/vending.store.ts`, a `providedIn: 'root'` signal
+  store wrapping `ProductsApiService`/`VendingApiService`. Private writable
+  signals, `.asReadonly()` public views. `busy` gates all three mutating
+  actions so a double-click (or any concurrent call) is a real no-op — only
+  one HTTP request ever in flight, proven with `httpTesting.match(...)`
+  returning length 1 rather than trusting a single `expectOne`. `purchase`
+  patches the returned product into `products` and zeroes `session` locally
+  (the response has no session field to apply — see P6-2's `insertedCoins`
+  finding — so this is bookkeeping on a known invariant from CLAUDE.md §2.5,
+  not client-side business logic); `reset` does the same for
+  `lastReturn`/session. `insertCoin` clears `lastPurchase`/`lastReturn`/
+  `error` up front — cleared `lastReturn` too, not just the `lastPurchase`
+  the task named, since a stale change-tray next to a freshly-growing total
+  is exactly the bug the rule was warning about. 8 new
+  `HttpTestingController` specs, all green. `lint` clean. `P7-9` stays `[~]`
+  until the `vm-product-card` stock-state test is added alongside the
+  components.
