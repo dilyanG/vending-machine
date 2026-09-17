@@ -1,6 +1,8 @@
 using VM.Server.Domain;
+using VM.Server.Service.Abstractions;
+using VM.Server.Service.DTOs;
 
-namespace VM.Server.Service.Vending;
+namespace VM.Server.Service.Implementations;
 
 /// <summary>
 /// Bounded coin-change by dynamic programming: the bank holds a limited count
@@ -17,7 +19,7 @@ public sealed class ChangeCalculationService : IChangeCalculator
 {
     private const int Unreachable = int.MaxValue;
 
-    public ChangeResult Calculate(int amountCents, IReadOnlyDictionary<int, int> availableCoins)
+    public ChangeResultDto Calculate(int amountCents, IReadOnlyDictionary<int, int> availableCoins)
     {
         ArgumentNullException.ThrowIfNull(availableCoins);
         if (amountCents < 0)
@@ -27,7 +29,7 @@ public sealed class ChangeCalculationService : IChangeCalculator
 
         if (amountCents == 0)
         {
-            return ChangeResult.Made(new Dictionary<int, int>());
+            return ChangeResultDto.Made(new Dictionary<int, int>());
         }
 
         // Ascending order matters: it makes the largest denomination the last
@@ -97,7 +99,7 @@ public sealed class ChangeCalculationService : IChangeCalculator
 
         if (dp[layerCount, amountCents] == Unreachable)
         {
-            return ChangeResult.NotPossible();
+            return ChangeResultDto.NotPossible();
         }
 
         var coins = new Dictionary<int, int>();
@@ -114,6 +116,6 @@ public sealed class ChangeCalculationService : IChangeCalculator
             remainingAmount -= k * denomination;
         }
 
-        return ChangeResult.Made(coins);
+        return ChangeResultDto.Made(coins);
     }
 }

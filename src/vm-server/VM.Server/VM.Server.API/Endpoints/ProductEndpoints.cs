@@ -1,5 +1,6 @@
 using VM.Server.API.Dtos;
-using VM.Server.Service.Products;
+using VM.Server.Service.DTOs;
+using VM.Server.Service.Implementations;
 
 namespace VM.Server.API.Endpoints;
 

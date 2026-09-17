@@ -1,4 +1,4 @@
-using VM.Server.API.Dtos;
+using VM.Server.Service.DTOs;
 using VM.Server.Domain.Entities;
 using VM.Server.Service.Abstractions;
 

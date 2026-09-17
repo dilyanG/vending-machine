@@ -1,6 +1,4 @@
-using VM.Server.Service.Products;
-
-namespace VM.Server.Service.Vending;
+namespace VM.Server.Service.DTOs;
 
 public sealed record PurchaseResultDto(
     ProductDto Product,

@@ -1,3 +1,3 @@
-namespace VM.Server.Service.Vending;
+namespace VM.Server.Service.DTOs;
 
 public sealed record SessionDto(IReadOnlyList<CoinCountDto> InsertedCoins, int InsertedTotalCents);

@@ -2,9 +2,9 @@ using VM.Server.Domain;
 using VM.Server.Domain.Entities;
 using VM.Server.Domain.Errors;
 using VM.Server.Service.Abstractions;
-using VM.Server.Service.Products;
+using VM.Server.Service.DTOs;
 
-namespace VM.Server.Service.Vending;
+namespace VM.Server.Service.Implementations;
 
 /// <summary>
 /// Owns the vending state transitions that used to live on the aggregate:

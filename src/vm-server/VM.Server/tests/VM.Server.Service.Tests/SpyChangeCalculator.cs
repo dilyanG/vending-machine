@@ -1,4 +1,5 @@
-using VM.Server.Service.Vending;
+using VM.Server.Service.Abstractions;
+using VM.Server.Service.DTOs;
 
 namespace VM.Server.Service.Tests;
 
@@ -8,7 +9,7 @@ internal sealed class SpyChangeCalculator(IChangeCalculator inner) : IChangeCalc
 
     public IReadOnlyDictionary<int, int>? LastAvailableCoins { get; private set; }
 
-    public ChangeResult Calculate(int amountCents, IReadOnlyDictionary<int, int> availableCoins)
+    public ChangeResultDto Calculate(int amountCents, IReadOnlyDictionary<int, int> availableCoins)
     {
         LastAmountCents = amountCents;
         LastAvailableCoins = availableCoins;

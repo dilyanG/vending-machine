@@ -2,9 +2,7 @@ using Microsoft.Extensions.DependencyInjection;
 using VM.Server.Repository.InMemory;
 using VM.Server.Repository.MockExternalApi;
 using VM.Server.Service.Abstractions;
-using VM.Server.Service.Products;
-using VM.Server.Service.State;
-using VM.Server.Service.Vending;
+using VM.Server.Service.Implementations;
 
 namespace VM.Server.Repository;
 

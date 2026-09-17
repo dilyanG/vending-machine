@@ -2,9 +2,8 @@ using VM.Server.Domain;
 using VM.Server.Domain.Entities;
 using VM.Server.Domain.Errors;
 using VM.Server.Service.Abstractions;
-using VM.Server.Service.Products;
 
-namespace VM.Server.Service.State;
+namespace VM.Server.Service.Implementations;
 
 /// <summary>
 /// What "loading a machine" means: pulling the catalogue from the external

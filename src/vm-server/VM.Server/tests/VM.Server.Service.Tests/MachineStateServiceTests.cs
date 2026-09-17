@@ -1,7 +1,6 @@
 using FluentAssertions;
 using VM.Server.Domain.Errors;
-using VM.Server.Service.Products;
-using VM.Server.Service.State;
+using VM.Server.Service.Implementations;
 
 namespace VM.Server.Service.Tests;
 

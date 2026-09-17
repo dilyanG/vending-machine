@@ -3,8 +3,7 @@ using Microsoft.Extensions.Options;
 using VM.Server.Domain.Entities;
 using VM.Server.Domain.Errors;
 using VM.Server.Repository.InMemory;
-using VM.Server.Service.Products;
-using VM.Server.Service.State;
+using VM.Server.Service.Implementations;
 
 namespace VM.Server.Service.Tests;
 

@@ -3,8 +3,7 @@ using FluentAssertions;
 using Microsoft.Extensions.Options;
 using VM.Server.Repository.InMemory;
 using VM.Server.Repository.MockExternalApi;
-using VM.Server.Service.Products;
-using VM.Server.Service.State;
+using VM.Server.Service.Implementations;
 
 namespace VM.Server.Service.Tests;
 

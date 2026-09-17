@@ -1,7 +1,7 @@
 using Microsoft.Extensions.Options;
 using VM.Server.Domain.Entities;
 using VM.Server.Service.Abstractions;
-using VM.Server.Service.State;
+using VM.Server.Service.Implementations;
 
 namespace VM.Server.Repository.InMemory;
 

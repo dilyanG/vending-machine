@@ -1,6 +1,6 @@
 using System.Diagnostics;
 using FluentAssertions;
-using VM.Server.Service.Vending;
+using VM.Server.Service.Implementations;
 
 namespace VM.Server.Service.Tests;
 

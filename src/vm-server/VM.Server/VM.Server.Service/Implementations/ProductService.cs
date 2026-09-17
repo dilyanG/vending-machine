@@ -1,8 +1,9 @@
 using VM.Server.Domain.Entities;
 using VM.Server.Domain.Errors;
 using VM.Server.Service.Abstractions;
+using VM.Server.Service.DTOs;
 
-namespace VM.Server.Service.Products;
+namespace VM.Server.Service.Implementations;
 
 public sealed class ProductService(IVendingMachineStore store, ProductValidationService validation)
 {

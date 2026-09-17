@@ -2,7 +2,7 @@ using VM.Server.Domain;
 using VM.Server.Domain.Entities;
 using VM.Server.Domain.Errors;
 
-namespace VM.Server.Service.Products;
+namespace VM.Server.Service.Implementations;
 
 /// <summary>
 /// The one place every product/slot rule lives: name, price, quantity and the
