@@ -138,6 +138,12 @@ back exactly the coins you put in without buying anything.
 
 ## Design notes
 
+**Diagrams:** [`docs/diagrams/`](docs/diagrams/README.md) has the vending
+state machine (insert coin / purchase / reset, every refusal path and its
+error code) and the change calculation (where it sits in an atomic purchase,
+the bounded coin-change algorithm, and why greedy doesn't work) — both
+verified to render, not just eyeballed.
+
 - **Integer cents everywhere.** Floating-point money is never used.
 - **Bounded change-making.** The coin bank is finite, so change uses a
   dynamic-programming solve rather than a greedy pass — greedy can claim success

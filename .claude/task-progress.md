@@ -261,6 +261,19 @@ above, not deleted.
       the page and found `vm-product-card` has exactly one button, no clean
       pair of "two buttons on a card" exists; repo owner said to skip it
       rather than guess
+- [x] `P9-12` Two Mermaid diagrams added under `docs/diagrams/`:
+      `vending-state-machine.md` (insert/purchase/reset, every refusal path
+      with its real error code, why a refusal preserves the session) and
+      `change-calculation.md` (the atomic purchase sequence, the bounded
+      coin-change DP's shape, the greedy counterexample). `docs/diagrams/README.md`
+      indexes both; linked from the main README's Design notes; `CLAUDE.md`
+      §8 now requires updating the matching diagram in the same commit as any
+      vending-transition or change-algorithm change. Both diagrams verified
+      to actually render (`@mermaid-js/mermaid-cli`), not just eyeballed —
+      caught and worked around a real Mermaid `stateDiagram-v2` bug in the
+      process (silently collapses repeated self-loops on one state to the
+      last one defined; see the diagram file's own note and the decision
+      log).
 
 ---
 
@@ -807,6 +820,33 @@ Format: `YYYY-MM-DD — decision — why — alternatives rejected`
   persistent action button on the page is `vm-coin-slot`'s "Return coins",
   which isn't inside a card at all. Asked which pair was meant; repo owner
   said to skip it. No `vm-button` or template changes made for this part.
+- `2026-09-18` — **`vending-state-machine.md`'s `purchase` transition routes
+  through a `purchase_check` `<<choice>>` pseudostate instead of four direct
+  `CoinsHeld → CoinsHeld` self-loops, and `insertCoin`'s two outcomes while
+  `CoinsHeld` share one self-loop with a `|`-separated label instead of two
+  arrows** — not a style preference. Verified with a minimal reproduction
+  through `@mermaid-js/mermaid-cli` that `stateDiagram-v2` silently drops
+  every self-loop on a state except the last one defined in source order (no
+  error, no warning — the SVG just doesn't contain the earlier labels' text).
+  Cross-state edges, including several sharing the same source and target,
+  are unaffected. Rejected drawing the four purchase outcomes as direct
+  self-loops (would have silently rendered as one, exactly the "embarrassing
+  error box" the task warned about, except worse — no visible error at all)
+  and rejected a semicolon as the separator inside the combined `insertCoin`
+  label (also verified by minimal repro: `stateDiagram-v2` parses `;` as a
+  statement separator mid-label, splitting it into a malformed fragment).
+  Every diagram's rendered SVG was grepped for its expected text content, not
+  just checked for a clean CLI exit code, precisely because this failure mode
+  produces neither.
+- `2026-09-18` — **`purchase` from `Idle` and `reset` from `Idle` are real,
+  reachable no-op code paths, deliberately not drawn** in
+  `vending-state-machine.md` — neither `VendingService.PurchaseAsync` nor
+  `ResetAsync` guards against being called with an empty session; `purchase`
+  from `Idle` yields `PRODUCT_NOT_FOUND`/`OUT_OF_STOCK`/`INSUFFICIENT_FUNDS`
+  (never `CHANGE_UNAVAILABLE`, which requires funds already in excess of the
+  price) and `reset` from `Idle` just returns nothing. Reported explicitly in
+  the diagram file rather than either drawn (three more edges document a case
+  where nothing was ever at stake) or silently omitted.
 
 ---
 
@@ -1309,3 +1349,17 @@ needs to know.
   mid-flight in the working tree from a concurrent session throughout this
   turn; staged only the exact frontend files touched here, never a broad
   `git add`, so none of it is in either commit.
+- `2026-09-18` — `P9-12`: read the current `VendingService`/
+  `ChangeCalculationService` fresh (namespaces had moved to
+  `VM.Server.Service.DTOs`/`.Implementations` since the last backend session
+  touched this repo — confirmed the business logic itself is unchanged, only
+  reorganised) before drawing anything, per the task's own instruction. Two
+  Mermaid diagrams added under `docs/diagrams/` (`vending-state-machine.md`,
+  `change-calculation.md`), an index README, and links from the main
+  README/`CLAUDE.md` §8 — see the phase entry above and the two decision-log
+  entries for what each diagram covers and the real Mermaid renderer bug
+  (silent self-loop collapsing on `stateDiagram-v2`) found and designed
+  around while verifying with `@mermaid-js/mermaid-cli`. Left
+  `angular.json`'s stray CLI-written diff untouched, as before. Three
+  commits, scope `docs`: one per diagram, one for the index/links/tracker
+  update.

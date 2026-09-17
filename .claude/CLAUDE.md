@@ -559,3 +559,11 @@ Rules:
   this in fifteen minutes and judge it.
 - If you cannot run a command, say so plainly — never report a build or test run
   you did not actually perform.
+- **Diagrams live in `docs/diagrams/` and describe the real code.** If a
+  change alters a vending state transition (insert/purchase/reset in
+  `VendingService`) or the change algorithm (`ChangeCalculationService`),
+  update the matching diagram in the same commit and re-verify it renders
+  (`npx -y @mermaid-js/mermaid-cli -i <file>.md -o /tmp/out.svg`, and check the
+  actual rendered text — Mermaid can silently drop content, e.g. collapsing
+  repeated self-loops on one state, without any error). A diagram that has
+  drifted from the code is worse than no diagram.
