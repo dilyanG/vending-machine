@@ -11,6 +11,8 @@ import { Button, ButtonType, ButtonVariant } from './button';
       [type]="type()"
       [disabled]="disabled()"
       [loading]="loading()"
+      [ariaDisabled]="ariaDisabled()"
+      [ariaDescribedBy]="ariaDescribedBy()"
       (click)="clicks.set(clicks() + 1)"
     >
       Save
@@ -22,6 +24,8 @@ class TestHost {
   readonly type = signal<ButtonType>('button');
   readonly disabled = signal(false);
   readonly loading = signal(false);
+  readonly ariaDisabled = signal(false);
+  readonly ariaDescribedBy = signal<string | null>(null);
   readonly clicks = signal(0);
 }
 
@@ -74,5 +78,22 @@ describe('Button', () => {
     fixture.detectChanges();
     expect(buttonEl().disabled).toBeTrue();
     expect(buttonEl().getAttribute('aria-busy')).toBe('true');
+  });
+
+  it('marks aria-disabled without removing the button from the tab order, and lets the caller decide whether to act on the click', () => {
+    fixture.componentInstance.ariaDisabled.set(true);
+    fixture.detectChanges();
+
+    expect(buttonEl().disabled).toBeFalse();
+    expect(buttonEl().getAttribute('aria-disabled')).toBe('true');
+
+    buttonEl().click();
+    expect(fixture.componentInstance.clicks()).toBe(1);
+  });
+
+  it('forwards ariaDescribedBy onto the native button', () => {
+    fixture.componentInstance.ariaDescribedBy.set('reason-1');
+    fixture.detectChanges();
+    expect(buttonEl().getAttribute('aria-describedby')).toBe('reason-1');
   });
 });

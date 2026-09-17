@@ -68,6 +68,9 @@ $breakpoints: (
   --measure-max-width: 32rem;
   --touch-target-min: 2.75rem;
   --overlay-color: rgb(10 10 12 / 55%);
+  --sidebar-width: 20rem;
+  --coin-size-max: 4.5rem;
+  --product-image-size: 6rem;
 }
 
 @media (prefers-color-scheme: dark) {

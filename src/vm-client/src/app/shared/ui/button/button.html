@@ -3,6 +3,8 @@
   [class]="buttonClasses()"
   [disabled]="disabled() || loading()"
   [attr.aria-busy]="loading() ? 'true' : null"
+  [attr.aria-disabled]="ariaDisabled() ? 'true' : null"
+  [attr.aria-describedby]="ariaDescribedBy()"
 >
   @if (loading()) {
     <span class="vm-button__spinner" aria-hidden="true"></span>

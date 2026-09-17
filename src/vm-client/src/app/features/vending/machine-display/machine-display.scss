@@ -1,0 +1,37 @@
+:host {
+  display: block;
+}
+
+.vm-machine-display {
+  padding: var(--space-4);
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.vm-machine-display__label {
+  margin: 0 0 var(--space-1);
+  color: var(--text-muted);
+  font-size: var(--font-size-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.vm-machine-display__total {
+  margin: 0;
+  font-size: var(--font-size-2xl);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.vm-machine-display__message {
+  margin: var(--space-3) 0 0;
+  color: var(--text);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-base);
+}
+
+.vm-machine-display__message--error {
+  color: var(--danger);
+  font-weight: 600;
+}

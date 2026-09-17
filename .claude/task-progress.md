@@ -9,9 +9,8 @@ the same commit as the work it describes. Rules: `CLAUDE.md` §7.
 
 ## Next up
 
-1. `P7-1` … `P7-9` — vending UI
-2. `P8-1` … `P8-7` — products admin UI
-3. `P9` — polish, verification, handover
+1. `P8-1` … `P8-7` — products admin UI
+2. `P9` — polish, verification, handover
 
 ## Open questions
 
@@ -50,29 +49,12 @@ below and the decision log. `CoinBundle`/`P1-3` superseded.
 
 ### P2 — Change calculation `[x]`
 
-Executed after P3 (see P3's session log for why) - the interface and result
-type P1-7 declared are now actually implemented.
-
-- [x] `P2-1` `ChangeResult` — `Made`/`NotPossible` factories (renamed from
-      P1-7's `Success`/`Failure` to match this task), `TotalCents` added;
-      `IChangeCalculator`'s signature confirmed unchanged from P1-7
-- [x] `P2-2` `BoundedChangeCalculator` — bounded coin-change DP exactly as
-      specified (denominations ascending, min coins, deterministic
-      larger-denomination tie-break — see decision log for how)
-- [x] `P2-3` Class-level comment with the worked 60c-from-{50:1,20:3}
-      counterexample
-- [x] `P2-4` 13 tests: boundary table (amount 0, exact coin, impossible,
-      empty bank, bank smaller than amount), the named greedy-counterexample
-      test, minimal-coin-count, unaccepted-denomination filtering, purity,
-      determinism, a Stopwatch-measured performance test (500c/200 coins:
-      ~2ms, budget 50ms), and a range-of-amounts property test
-- [x] `P2-5` Wired the real calculator into the `VendingMachine` purchase
-      tests (P1-7), replacing the hand-written fake everywhere except the
-      one `CHANGE_UNAVAILABLE` test, which still needs a fake that always
-      reports impossible to exercise that path deterministically. Added
-      `SpyChangeCalculator` (wraps the real calculator, records the last
-      call's arguments) so the "offers bank + inserted coins to the
-      calculator" test could use real computation too, not just a stub.
+Executed after P3 (see P3's session log for why). `BoundedChangeCalculator`
+(bounded coin-change DP, ascending denominations, deterministic
+larger-denomination tie-break), `ChangeResult` `Made`/`NotPossible`
+factories, the named 60c-from-{50:1,20:3} greedy-counterexample proof, 13
+tests incl. a Stopwatch performance test. `P2-1`…`P2-5` all done — see
+decision log for the algorithm/tie-break reasoning.
 
 ### P3 — Service layer: products `[x]`
 
@@ -85,82 +67,24 @@ calls) — see `CLAUDE.md` §2.6/§4.1.
 ### P4 — Service layer: vending `[x]`
 
 Much smaller than `IMPLEMENTATION_PLAN.md` describes — the P1 aggregate
-refactor already absorbed most of it. See decision log.
-
-- [-] `P4-1` `ICoinBank` + `InMemoryCoinBank`, float from config —
-      **superseded**: the `VendingMachine` aggregate owns its own `Bank`
-      (`CoinInventory`), built in P1-7/P3-4
-- [-] `P4-2` `VendingSession` — **superseded**: the aggregate owns the
-      session (`InsertedCoins`/`InsertedTotalCents`) directly, built in P1-7
-- [x] `P4-3` `VendingService.InsertCoinAsync` — one call to
-      `VendingMachine.InsertCoin`, maps to `SessionDto`
-- [x] `P4-4` `VendingService.PurchaseAsync` — one call to
-      `VendingMachine.Purchase`, maps `PurchaseResult` to `PurchaseResultDto`
-      (no rollback code to write — P1-7's compute-then-commit ordering
-      already made a failed purchase a no-op)
-- [x] `P4-5` `VendingService.ResetAsync` — one call to
-      `VendingMachine.ReturnInsertedCoins`, maps to `ReturnedCoinsDto`
-- [-] `P4-6` Single lock over session + bank + inventory — **superseded**:
-      `InMemoryVendingMachineStore`'s `SemaphoreSlim` (P3-4) already guards
-      every call into the aggregate, mutating or not
-- [-] `P4-7` Tests incl. atomicity proof and `paid == price + change` —
-      **superseded**: both already proven on the aggregate in
-      `VendingMachineTests` (P1-7/P2-5)
-- [x] `P4-8` DI: `ServiceCollectionExtensions.AddVendingMachineBackend` in
-      `VM.Server.Repository` (the first composition-root registration in the
-      solution — P3's scope excluded API/DI entirely, so nothing existed
-      yet to extend; see decision log) registers `IExternalCatalogSource`,
-      `IVendingMachineStore`, `IChangeCalculator` → `BoundedChangeCalculator`,
-      `ProductService` and `VendingService`, all singleton
-- [x] `P4-9` 6 `VendingServiceTests`: consistent `PurchaseAsync` DTO
-      (`paid == price + change`), real `BoundedChangeCalculator` wired in
-      (asserted against the same greedy-counterexample bank as
-      `BoundedChangeCalculatorTests`), `changeCoins`/`returnedCoins` sorted
-      descending, a `DomainException` surfacing with its code intact,
-      `GetDenominationsAsync` ascending, `ResetAsync` round-trip
+refactor already absorbed most of it (`P4-1`/`P4-2`/`P4-6`/`P4-7` superseded,
+see decision log). What remained: `VendingService`
+(`InsertCoinAsync`/`PurchaseAsync`/`ResetAsync`, `P4-3`…`P4-5`), each one
+aggregate call plus DTO mapping; `AddVendingMachineBackend` DI (`P4-8`); 6
+mapping-focused tests (`P4-9`). `P4-3`…`P4-5`/`P4-8`/`P4-9` done.
 
 ### P5 — HTTP API `[x]`
 
 **Contract frozen: 2026-09-16.** Every route, payload and error shape in
 `CLAUDE.md` §3 is now live and tested; the frontend can build against it from
-`P6-2`/`P6-3` onward.
-
-- [x] `P5-1` `ExternalEndpoints`/`ProductEndpoints`/`VendingEndpoints` — one
-      static class per group, `MapGroup` + extension methods, registered from
-      `Program.cs`. Routes exactly as §3.1, nothing extra.
-- [x] `P5-2` DTOs matching §3.2: reused the existing `ProductDto`/`SessionDto`/
-      `PurchaseResultDto`/`ReturnedCoinsDto`/`CoinCountDto` from Service
-      (P3/P4) as the response bodies directly rather than duplicating
-      structurally-identical API-layer copies; added API-only
-      `ExternalProductDto` (no quantity), `CreateProductRequest`,
-      `UpdateProductRequest`, `InsertCoinRequest`, `PurchaseRequest` and
-      `ErrorResponseDto` for the shapes Service didn't already have
-- [x] `P5-3` `ExceptionHandlingMiddleware` — maps `DomainException` to the
-      §3.3 body with the exact status table; unmapped/non-domain exceptions
-      → 500 with a generic body (no stack trace, type name or path, in any
-      environment); business refusals logged at `Information`, everything
-      else at `Error`
-- [x] `P5-4` `AddVendingMachineBackend` (P4) plus a config-binding fix (see
-      decision log); CORS policy `frontend` from config; OpenAPI JSON in
-      Development via the already-referenced `Microsoft.AspNetCore.OpenApi`,
-      plus a zero-new-package CDN-loaded Swagger UI at `/swagger` (Development
-      only) so `.Produces<T>()` response/error documentation is actually
-      browsable, not just raw JSON
-- [x] `P5-5` `launchSettings.json` already had the HTTP-only profile on 5080
-      since P0 — confirmed, no change needed
-- [x] `P5-6` 26 `WebApplicationFactory` integration tests — every §3.1 route,
-      every error code asserted by its `code` field (not just status), the
-      full happy path, `CHANGE_UNAVAILABLE` leaving the session intact,
-      reset/reload round trips, and a 500-with-no-leak test (a test-only fake
-      `IVendingMachineStore`, not a production backdoor — see decision log).
-      **Isolation: each test class owns its own `WebApplicationFactory`**
-      (created in the constructor, disposed via `IDisposable`) rather than a
-      shared `IClassFixture` — xUnit's per-test class instantiation then
-      gives every test its own singleton store for free, no explicit reset
-      needed
-- [x] `P5-7` Six placeholder product SVGs in
-      `src/vm-client/public/assets/products/`, one per `catalogue.seed.json`
-      `imageUrl` — confirmed every path resolves
+`P6-2`/`P6-3` onward. `ExternalEndpoints`/`ProductEndpoints`/
+`VendingEndpoints` (Minimal API, `MapGroup`), `ExceptionHandlingMiddleware`
+(§3.3 shape, full status table), DI/CORS/OpenAPI wiring, a CDN-loaded
+Swagger UI at `/swagger` in Development, 26 `WebApplicationFactory`
+integration tests (every route, every error code, isolation via a fresh
+factory per test class), six placeholder product SVGs. `P5-1`…`P5-7` all
+done — see decision log for the config-binding bug caught during manual
+verification.
 
 ### P6 — Frontend foundation `[x]`
 
@@ -173,7 +97,7 @@ log); `P6-2`/`P6-3`/`P6-8` done last once `P5` froze the contract, verified
 against the real DTOs/live OpenAPI doc/curl responses, not `CLAUDE.md` §3
 alone (see decision/session log for the `insertedCoins` field-name finding).
 
-### P7 — Vending UI `[~]`
+### P7 — Vending UI `[x]`
 
 - [x] `P7-1` `vending.store` signal store (`core/state/vending.store.ts`) —
       private writable signals, public `.asReadonly()` views; `busy` gates
@@ -182,20 +106,37 @@ alone (see decision/session log for the `insertedCoins` field-name finding).
       product, zero the session) rather than refetching; `canAfford` is a
       plain method (not `computed()`, which cannot take an argument) reading
       `insertedTotal`/`products` for UX only
-- [ ] `P7-2` `machine-display` (`aria-live`)
-- [ ] `P7-3` `coin-slot` from API denominations
-- [ ] `P7-4` `product-grid` + `product-card`
-- [ ] `P7-5` `change-tray`
-- [ ] `P7-6` Return-coins / reset
-- [ ] `P7-7` Responsive layout 1/2/3/4 columns, sticky coin panel on mobile
-- [ ] `P7-8` Loading / empty / error states
-- [~] `P7-9` Store half done — 8 specs: insert accumulates, busy guards all
-      three mutating actions (not just purchase, per its own reasoning), a
-      successful purchase patches the product and zeroes the session, a
-      failed purchase leaves `insertedTotal` untouched and sets `error`,
-      reset clears the session and populates `lastReturn`, inserting a coin
-      clears a previous `lastPurchase`/`error`, `canAfford`. Still needs the
-      `vm-product-card` stock-state test.
+- [x] `P7-2` `vm-machine-display` — the page's one `role="status"
+      aria-live="polite"` region, wrapping both the inserted total and the
+      current prompt/error together so an update announces once
+- [x] `P7-3` `vm-coin-slot` — one button per `denominations()` entry (never
+      hard-coded), circles sized by a `--coin-t` ratio computed from the live
+      list so no pixel value depends on which denominations the API returns;
+      `Return coins` disabled when nothing is inserted
+- [x] `P7-4` `vm-product-grid` + `vm-product-card` — three stock states
+      (out-of-stock/low-stock/in-stock) plus an unaffordable-but-buyable
+      state; Buy is never natively `disabled` when merely unaffordable, and
+      even when out of stock it's `aria-disabled` (extended `vm-button` for
+      this — focusable, `aria-describedby` reason — see decision log), not
+      natively disabled, so screen-reader users can still reach it and be
+      told why
+- [x] `P7-5` `vm-change-tray` — per-denomination breakdown via a new
+      `denominationLabel` pipe ("1 x 50c", not "55c"); moves focus to itself
+      via an `effect()` when `lastPurchase` transitions to non-null
+- [x] `P7-6` Return-coins wired to `store.reset()`, coin-slot
+- [x] `P7-7` Responsive: grid 1/2/3/4 columns at base/sm/md/lg; panel sticky
+      at the bottom below `lg`, static side column above it; a
+      `ResizeObserver`-measured `--vm-panel-height` custom property pads the
+      product section so the sticky bar never covers the last row — verified
+      live (see session log), not assumed
+- [x] `P7-8` Loading skeleton, an empty state, a retryable load-failure
+      state, and a runtime-error state (message shown in `vm-machine-display`
+      while the rest of the screen stays usable) — `CHANGE_UNAVAILABLE`
+      leaves `insertedTotal` visibly unchanged, verified live against a
+      deliberately drained coin bank, not simulated
+- [x] `P7-9` 8 store specs (see `P7-1`) + 4 `vm-product-card` specs (in
+      stock/low stock/out of stock/unaffordable, queried by
+      `data-testid`/role, never CSS class)
 
 ### P8 — Products admin UI `[ ]`
 
@@ -516,6 +457,73 @@ Format: `YYYY-MM-DD — decision — why — alternatives rejected`
   `CoinCountDto`, `ErrorResponseDto`, `ExternalProductDto`, both product
   request DTOs) matches the C# source exactly — confirmed no doc/code drift
   beyond the `insertedCoins` finding above.
+- `2026-09-17` — **`vm-button` gained `ariaDisabled`/`ariaDescribedBy` inputs**
+  rather than a local workaround in `vm-product-card` for the out-of-stock Buy
+  button — P7-4 explicitly asked for `aria-disabled` (not native `disabled`)
+  with an accessible reason, and P6-9's own usage note says to extend a
+  primitive rather than route around it. Native `disabled` removes an element
+  from the tab order entirely, which would hide the "why" from a keyboard/
+  screen-reader user reaching for it; `ariaDisabled` keeps the button
+  focusable and clickable and leaves it to the caller's click handler to
+  ignore the click, while `ariaDescribedBy` points at a reason string —
+  rejected only ever using native `disabled` (loses the explanation) and
+  rejected duplicating a second button-like element in `product-card` instead
+  of extending `vm-button` (violates the "extend, don't work around"
+  instruction and would drift from the primitive's styling over time).
+- `2026-09-17` — **`vm-product-card` derives "affordable" locally from an
+  `insertedTotal` input plus its own `product().priceCents`**, rather than
+  taking a precomputed boolean from the store's `canAfford()` — still
+  presentational (driven by inputs, never injects `VendingStore`, per
+  CLAUDE.md §5.2), and it lets the card also compute the exact shortfall
+  amount for its hint text ("Insert €0.35 more") without a second input.
+  `VendingStore.canAfford(id)` still exists (P7-1's own spec required it) and
+  is store-tested directly; nothing currently reuses it beyond the store's own
+  tests, which is fine — it is a genuine part of the store's public surface,
+  not dead code.
+- `2026-09-17` — **A `denominationLabel` pipe (`core/pipes/`), not
+  `centsToCurrency`, labels individual coins** ("5c", "€1", "€2" — in the
+  coin-slot circles and the change-tray breakdown) — CLAUDE.md §5.3 reserves
+  `centsToCurrency`/`Intl.NumberFormat` for *formatted money amounts*
+  (prices, totals); a coin's short glyph is a different kind of label
+  entirely (matches the README's own denomination table style), and giving
+  it a second small pipe keeps that distinction explicit rather than
+  overloading the one pipe with a "short mode" flag. Totals (`changeCents`,
+  `returnedTotalCents`, the machine display's `insertedTotal`) still go
+  through `centsToCurrency` — only the per-coin breakdown lines use the new
+  pipe.
+- `2026-09-17` — **Three new layout tokens added to `_tokens.scss`**
+  (`--sidebar-width: 20rem`, `--coin-size-max: 4.5rem`,
+  `--product-image-size: 6rem`) rather than literal values in component
+  SCSS — none of the existing spacing/radius/type-scale tokens fit these
+  three structural sizes, and §5.4 bans magic numbers in component styles;
+  extending the token set (precedent: P6-9 added `--touch-target-min` etc.
+  the same way) keeps the "no literal values" rule intact without inventing
+  a contrived `calc()` off an unrelated token. `--touch-target-min` (already
+  44px, the WCAG minimum) doubles as the coin circles' *minimum* size, so the
+  smallest coin (5c) is never smaller than an accessible touch target.
+- `2026-09-17` — **`.visually-hidden` moved from a local declaration inside
+  `home-page.scss` to a shared utility in the global `_reset.scss`** — P7's
+  `vm-product-card` needed the same utility for its out-of-stock reason text,
+  and duplicating a cross-cutting utility class per feature is exactly the
+  kind of drift `_tokens.scss`/`_mixins.scss` already exist to prevent for
+  colours and breakpoints; `_reset.scss` is already global and unencapsulated
+  (Angular's emulated view encapsulation only scopes a component's *own*
+  stylesheet, not the root `styles.scss` it forwards), so no component needs
+  to `@use` anything new to get it.
+- `2026-09-17` — **The mobile sticky coin panel's bottom-padding reservation
+  is measured live via `ResizeObserver`, not a fixed guess** — the panel's
+  height is genuinely dynamic (it grows with however many denominations the
+  API returns, plus whether an error message or change-tray content is
+  showing), so a hard-coded padding value would drift out of sync exactly
+  when it mattered most; a signal-driven `effect()` on the page's own
+  `viewChild` (same pattern as `vm-modal`'s focus trap) sets a
+  `--vm-panel-height` custom property that the product grid's CSS reads,
+  zeroed out above `lg` where the panel is a static side column instead —
+  verified live by scrolling an actual page to its true document-bottom and
+  confirming the last card's bottom edge cleared the panel's top edge, not
+  by comparing raw unscrolled bounding-rect numbers (which looked like a
+  false-positive "overlap" until re-checked at the real scroll position —
+  see session log).
 - `2026-09-16` — **`POST /api/products/reload` and the `DELETE`/create
   actions return `204 No Content`/`201 Created` respectively**, choices
   `CLAUDE.md` §3 doesn't pin down explicitly (only the purchase/reset
@@ -791,3 +799,64 @@ needs to know.
   `HttpTestingController` specs, all green. `lint` clean. `P7-9` stays `[~]`
   until the `vm-product-card` stock-state test is added alongside the
   components.
+- `2026-09-17` — Finished P7 (vending UI): `vm-machine-display`,
+  `vm-coin-slot`, `vm-product-card`, `vm-product-grid`, `vm-change-tray`,
+  and the `vending-page` wiring them to the store (see decision log for the
+  `vm-button` extension, the `denominationLabel` pipe, the new layout
+  tokens, and the `ResizeObserver`-measured sticky panel). `lint`/`build`
+  green; `test:ci` 81/81 (22 new: 8 store from the earlier session + 4
+  `vm-product-card` + 3 `vm-change-tray` + 4 `vending-page` + 2 `vm-button`
+  (new inputs) + 2 `denominationLabel` pipe).
+
+  Manual verification, backend running, all done live (not assumed):
+  - **Insert → buy → change → stock decrement**: inserted 2,10 € across
+    1€/50c/20c/20c coins (keyboard-only: `Tab`+`Enter` on the focused Buy
+    button, not a synthetic click), bought Chocolate Bar (210c, exact
+    payment) — quantity 10→9, focus landed on the change tray
+    (`document.activeElement` confirmed), tray read "Chocolate Bar
+    dispensed / Change: 0,00 €".
+  - **Can't afford**: inserted 20c, attempted Chocolate Bar (210c) —
+    `INSUFFICIENT_FUNDS` shown as "Please insert more money to buy this
+    item." (never the raw code), total stayed at 0,20 €.
+  - **`CHANGE_UNAVAILABLE`**: deliberately drained the bank's entire 5c/10c
+    supply first (20 real purchases via the API, each returning exactly one
+    5c+10c as change, confirmed by the actual response bodies — not a
+    stubbed/faked bank state), then in the browser inserted 1€ and bought
+    Water (85c, needs 15c change, now unmakeable) — friendly message shown,
+    total stayed at 1,00 €, Water's badge stayed "15 in stock" (unchanged).
+    Restarted the backend afterward to reset the bank and every mutated
+    quantity back to the seed.
+  - **Return coins**: inserted 50c+20c+20c (90c), clicked Return — total
+    back to 0,00 €, tray read "1 x 50c 2 x 20c", matching exactly what went
+    in.
+  - **No horizontal scroll**: `document.documentElement.scrollWidth ===
+    clientWidth` confirmed at 320/360/768/1024/1440px.
+  - **Sticky bar vs. last row**: first attempt at this check gave a
+    false-positive "overlap" by comparing unscrolled bounding-rect numbers
+    (the last card's *document position* is naturally far below an
+    800px-tall viewport, which isn't the same thing as being visually
+    covered). Re-checked correctly by scrolling an actual page to
+    `scrollHeight` and comparing rects at that real position: last card
+    bottom (−48.7px, already scrolled clear above the viewport) vs. panel
+    top (359px) — no overlap. Screenshot saved.
+  - **Keyboard-only**: coin insertion via `focus()` + `Enter` on a coin
+    button moved the total from 0,00 € to 0,20 €; the purchase flow above
+    was also driven the same way. Tab order sampled and consistent with DOM
+    order (header → grid → panel); an apparent backward jump in the raw
+    sample was the headless browser wrapping past the last focusable
+    element back to the top, not a real trap.
+  - **Dark mode**: read `--surface`/`--text`/`--danger`/`--success`/
+    `--warning` back from the live page under `prefers-color-scheme: dark`
+    — all match `_tokens.scss`'s dark block exactly (no new colour tokens
+    were introduced this phase, so no new contrast pairs to compute).
+    Screenshots at 1024px and 360px both dark, plus 360px light, all
+    visually reviewed — coin circles, badges and the change tray all read
+    correctly in both themes.
+
+  Also found and fixed an unrelated environment issue: the long-running dev
+  server (background task from an earlier session) had gotten stuck after a
+  transient "stylesheet not found" error mid-edit and stopped rebuilding on
+  further file changes, silently serving a stale bundle. Killed the orphaned
+  process directly (`TaskStop` alone didn't reach it — `npm start` had
+  detached a child process outside the tracked task) and restarted clean.
+  Closes P7. Next: P8 (products admin UI).

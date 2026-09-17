@@ -1,0 +1,9 @@
+<div class="vm-product-grid">
+  @for (product of products(); track product.id) {
+    <vm-product-card
+      [product]="product"
+      [insertedTotal]="insertedTotal()"
+      (buy)="buy.emit($event)"
+    />
+  }
+</div>

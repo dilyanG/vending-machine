@@ -37,7 +37,8 @@
   outline-offset: 2px;
 }
 
-.vm-button:disabled {
+.vm-button:disabled,
+.vm-button--aria-disabled {
   cursor: not-allowed;
   opacity: 0.6;
 }

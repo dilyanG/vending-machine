@@ -1,0 +1,81 @@
+@use 'mixins';
+
+:host {
+  display: block;
+}
+
+.vm-vending-page__skeleton {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-5);
+
+  @include mixins.respond-to(sm) {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  @include mixins.respond-to(md) {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.vm-vending-page__skeleton-card {
+  height: 14rem;
+  background: var(--surface-raised);
+  border-radius: var(--radius-lg);
+  animation: vm-skeleton-pulse var(--transition-slow) ease-in-out infinite alternate;
+}
+
+@keyframes vm-skeleton-pulse {
+  from {
+    opacity: 0.6;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.vm-vending-page__layout {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+
+  @include mixins.respond-to(lg) {
+    flex-direction: row;
+    align-items: flex-start;
+  }
+}
+
+.vm-vending-page__products {
+  flex: 1 1 auto;
+  min-width: 0;
+  // Reserves space so the sticky panel below never covers the last product
+  // row on mobile; measured live from the panel's own rendered height.
+  padding-bottom: var(--vm-panel-height, 0px);
+
+  @include mixins.respond-to(lg) {
+    padding-bottom: 0;
+  }
+}
+
+.vm-vending-page__panel {
+  position: sticky;
+  z-index: 10;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding-block: var(--space-4);
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  box-shadow: var(--shadow-md);
+
+  @include mixins.respond-to(lg) {
+    position: static;
+    flex: 0 0 var(--sidebar-width);
+    padding-block: 0;
+    padding-inline-start: var(--space-5);
+    border-top: none;
+    border-left: 1px solid var(--border);
+    box-shadow: none;
+  }
+}
