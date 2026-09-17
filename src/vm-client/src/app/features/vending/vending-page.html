@@ -1,1 +1,49 @@
-<h1>Vending</h1>
+<h1 class="visually-hidden">Vending</h1>
+
+<div class="vm-vending-page" [style.--vm-panel-height.px]="panelHeight()">
+  @if (store.loading()) {
+    <div class="vm-vending-page__skeleton" aria-hidden="true">
+      @for (card of skeletonCards; track card) {
+        <div class="vm-vending-page__skeleton-card"></div>
+      }
+    </div>
+  } @else if (loadFailed()) {
+    <vm-empty-state title="Couldn't load the machine" [message]="displayMessage()">
+      <span empty-state-icon aria-hidden="true">⚠️</span>
+      <vm-button empty-state-action (click)="store.load()">Try again</vm-button>
+    </vm-empty-state>
+  } @else if (store.products().length === 0) {
+    <vm-empty-state
+      title="No products available"
+      message="Check back later — the machine is currently empty."
+    >
+      <span empty-state-icon aria-hidden="true">🛒</span>
+    </vm-empty-state>
+  } @else {
+    <div class="vm-vending-page__layout">
+      <section class="vm-vending-page__products" aria-label="Products">
+        <vm-product-grid
+          [products]="store.products()"
+          [insertedTotal]="store.insertedTotal()"
+          (buy)="onBuy($event)"
+        />
+      </section>
+
+      <aside #panel class="vm-vending-page__panel" aria-label="Coin slot and machine status">
+        <vm-machine-display
+          [insertedTotal]="store.insertedTotal()"
+          [message]="displayMessage()"
+          [isError]="isError()"
+        />
+        <vm-coin-slot
+          [denominations]="store.denominations()"
+          [disabled]="store.busy()"
+          [hasInsertedCoins]="hasInsertedCoins()"
+          (insertCoin)="onInsertCoin($event)"
+          (returnCoins)="onReturnCoins()"
+        />
+        <vm-change-tray [lastPurchase]="store.lastPurchase()" [lastReturn]="store.lastReturn()" />
+      </aside>
+    </div>
+  }
+</div>

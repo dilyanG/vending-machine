@@ -1,0 +1,23 @@
+@use 'mixins';
+
+:host {
+  display: block;
+}
+
+.vm-product-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-5);
+
+  @include mixins.respond-to(sm) {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  @include mixins.respond-to(md) {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  @include mixins.respond-to(lg) {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}

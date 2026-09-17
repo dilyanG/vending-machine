@@ -1,0 +1,34 @@
+<div
+  #tray
+  class="vm-change-tray"
+  [class.vm-change-tray--empty]="!hasContent()"
+  tabindex="-1"
+  data-testid="change-tray"
+>
+  @if (lastPurchase(); as purchase) {
+    <h2 class="vm-change-tray__heading">Purchase complete</h2>
+    <p class="vm-change-tray__line">{{ purchase.product.name }} dispensed</p>
+    <p class="vm-change-tray__line">
+      Change: <strong>{{ purchase.changeCents | centsToCurrency }}</strong>
+    </p>
+    @if (purchase.changeCoins.length > 0) {
+      <ul class="vm-change-tray__breakdown">
+        @for (coin of purchase.changeCoins; track coin.denominationCents) {
+          <li>{{ coin.count }} x {{ coin.denominationCents | denominationLabel }}</li>
+        }
+      </ul>
+    }
+  } @else if (lastReturn(); as returned) {
+    <h2 class="vm-change-tray__heading">Coins returned</h2>
+    <p class="vm-change-tray__line">
+      Total: <strong>{{ returned.returnedTotalCents | centsToCurrency }}</strong>
+    </p>
+    @if (returned.returnedCoins.length > 0) {
+      <ul class="vm-change-tray__breakdown">
+        @for (coin of returned.returnedCoins; track coin.denominationCents) {
+          <li>{{ coin.count }} x {{ coin.denominationCents | denominationLabel }}</li>
+        }
+      </ul>
+    }
+  }
+</div>

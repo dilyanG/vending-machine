@@ -1,0 +1,26 @@
+<div class="vm-coin-slot">
+  <ul class="vm-coin-slot__coins">
+    @for (denomination of denominations(); track denomination) {
+      <li>
+        <button
+          type="button"
+          class="vm-coin"
+          [style.--coin-t]="ratioFor(denomination)"
+          [attr.aria-label]="ariaLabelFor(denomination)"
+          [disabled]="disabled()"
+          (click)="insertCoin.emit(denomination)"
+        >
+          {{ denomination | denominationLabel }}
+        </button>
+      </li>
+    }
+  </ul>
+
+  <vm-button
+    variant="secondary"
+    [disabled]="disabled() || !hasInsertedCoins()"
+    (click)="returnCoins.emit()"
+  >
+    Return coins
+  </vm-button>
+</div>

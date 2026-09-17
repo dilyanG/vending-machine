@@ -202,6 +202,10 @@ in §3.3.
 // POST /api/vending/reset → 200
 { "returnedCoins": [ { "denominationCents": 100, "count": 2 } ],
   "returnedTotalCents": 200 }
+
+// GET /api/vending/session → 200
+{ "insertedCoins": [ { "denominationCents": 100, "count": 1 } ],
+  "insertedTotalCents": 100 }
 ```
 
 ### 3.3 Error shape
@@ -303,7 +307,8 @@ nothing.** Do not let ASP.NET types leak below `API`.
 src/vm-client/
   src/app/
     core/
-      api/          products-api.service.ts, vending-api.service.ts, api-error.ts
+      api/          products-api.service.ts, vending-api.service.ts,
+                    external-catalog-api.service.ts, api-paths.ts, api-error.ts
       models/       product.model.ts, coin.model.ts
       state/        products.store.ts, vending.store.ts     # signal stores
       interceptors/ error.interceptor.ts

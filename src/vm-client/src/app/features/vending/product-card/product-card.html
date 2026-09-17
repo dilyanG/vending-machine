@@ -1,0 +1,39 @@
+<article
+  class="vm-product-card"
+  [class.vm-product-card--out-of-stock]="outOfStock()"
+  data-testid="product-card"
+>
+  <img
+    class="vm-product-card__image"
+    [src]="product().imageUrl ?? 'assets/products/placeholder.svg'"
+    [alt]="product().name"
+    width="96"
+    height="96"
+    loading="lazy"
+  />
+
+  <div class="vm-product-card__body">
+    <h3 class="vm-product-card__name">{{ product().name }}</h3>
+    <p class="vm-product-card__price">{{ product().priceCents | centsToCurrency }}</p>
+
+    <vm-badge [variant]="stockBadgeVariant()">{{ stockLabel() }}</vm-badge>
+
+    @if (outOfStock()) {
+      <span class="visually-hidden" [id]="reasonId()">This product is sold out.</span>
+    } @else if (!affordable()) {
+      <p class="vm-product-card__hint" [id]="reasonId()">
+        Insert {{ shortfallCents() | centsToCurrency }} more to buy
+      </p>
+    }
+
+    <vm-button
+      [variant]="affordable() && !outOfStock() ? 'primary' : 'secondary'"
+      [fullWidth]="true"
+      [ariaDisabled]="outOfStock()"
+      [ariaDescribedBy]="outOfStock() || !affordable() ? reasonId() : null"
+      (click)="onBuyClick()"
+    >
+      Buy
+    </vm-button>
+  </div>
+</article>

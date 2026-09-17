@@ -1,0 +1,9 @@
+<div class="vm-machine-display" role="status" aria-live="polite">
+  <p class="vm-machine-display__label">Inserted</p>
+  <p class="vm-machine-display__total">{{ insertedTotal() | centsToCurrency }}</p>
+  @if (message()) {
+    <p class="vm-machine-display__message" [class.vm-machine-display__message--error]="isError()">
+      {{ message() }}
+    </p>
+  }
+</div>
