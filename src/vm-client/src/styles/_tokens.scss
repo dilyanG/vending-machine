@@ -24,6 +24,9 @@ $breakpoints: (
   --danger: #c4293a;
   --danger-contrast: #ffffff;
   --warning: #9a6300;
+  --warning-surface: #ffd666;
+  --warning-border: #c99300;
+  --warning-text: #4a3300;
 
   // Spacing scale (4px base)
   --space-1: 0.25rem;
@@ -86,6 +89,9 @@ $breakpoints: (
     --danger: #ff6b6b;
     --danger-contrast: #1a0505;
     --warning: #ffcf5c;
+    --warning-surface: #5c3f00;
+    --warning-border: #8a661d;
+    --warning-text: #ffedc2;
 
     --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
     --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.5);
