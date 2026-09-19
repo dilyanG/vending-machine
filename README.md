@@ -83,18 +83,23 @@ npm run test:ci                  # single headless run
 .
 ├── src/
 │   ├── vm-server/VM.Server/
-│   │   ├── VM.Server.Domain/       # entities, coin rules, change algorithm
-│   │   ├── VM.Server.Service/      # product & vending use cases + abstractions
-│   │   ├── VM.Server.Repository/   # in-memory store + mock external catalog
+│   │   ├── VM.Server.Domain/       # data only: entities, error codes — no behaviour
+│   │   ├── VM.Server.Service/      # every rule, calculation and state transition
+│   │   │   ├── ServiceModels/      #   data-transfer types, suffixed *ServiceModel
+│   │   │   └── Implementations/    #   ProductService, VendingService, ChangeCalculationService, ...
+│   │   ├── VM.Server.Repository/   # in-memory store + mock external catalog (mechanical only)
 │   │   ├── VM.Server.API/          # HTTP endpoints
+│   │   │   └── DTO/                #   request/response types, suffixed *RequestDTO/*ResponseDTO
 │   │   └── tests/
+│   │       └── VM.Server.Service.Tests/  # the only backend test project
 │   └── vm-client/
 │       └── src/app/{core,features,shared}/
 ├── .claude/
 │   ├── CLAUDE.md             # engineering conventions and domain rules
 │   └── task-progress.md      # live progress tracker
 └── docs/
-    └── IMPLEMENTATION_PLAN.md  # phased build plan
+    ├── IMPLEMENTATION_PLAN.md  # phased build plan
+    └── diagrams/               # vending state machine + change calculation
 ```
 
 ---
