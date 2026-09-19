@@ -1,4 +1,4 @@
-using VM.Server.API.Dtos;
+using VM.Server.API.DTO;
 using VM.Server.Domain.Errors;
 
 namespace VM.Server.API.Middleware;
@@ -23,7 +23,7 @@ public sealed class ExceptionHandlingMiddleware(RequestDelegate next, ILogger<Ex
                 logger.LogInformation("Business refusal {Code}: {Message}", ex.Code, ex.Message);
             }
 
-            await WriteErrorAsync(context, statusCode, new ErrorResponseDto(ex.Code, ex.Message, ex.Details));
+            await WriteErrorAsync(context, statusCode, new ErrorResponseDTO(ex.Code, ex.Message, ex.Details));
         }
         catch (Exception ex)
         {
@@ -32,7 +32,7 @@ public sealed class ExceptionHandlingMiddleware(RequestDelegate next, ILogger<Ex
             await WriteErrorAsync(
                 context,
                 StatusCodes.Status500InternalServerError,
-                new ErrorResponseDto("INTERNAL_ERROR", "An unexpected error occurred.", null));
+                new ErrorResponseDTO("INTERNAL_ERROR", "An unexpected error occurred.", null));
         }
     }
 
@@ -51,7 +51,7 @@ public sealed class ExceptionHandlingMiddleware(RequestDelegate next, ILogger<Ex
         _ => StatusCodes.Status500InternalServerError,
     };
 
-    private static Task WriteErrorAsync(HttpContext context, int statusCode, ErrorResponseDto body)
+    private static Task WriteErrorAsync(HttpContext context, int statusCode, ErrorResponseDTO body)
     {
         context.Response.StatusCode = statusCode;
         return context.Response.WriteAsJsonAsync(body);

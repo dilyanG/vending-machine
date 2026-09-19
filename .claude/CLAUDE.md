@@ -256,16 +256,21 @@ src/vm-server/VM.Server/
     Errors/              DomainException.cs, ErrorCodes.cs
     AssemblyInfo.cs      # InternalsVisibleTo Service/Repository/Service.Tests only
   VM.Server.Service/               # ALL business logic lives here. Depends on Domain only.
-    Products/            ProductDto.cs, ProductService.cs (CRUD),
-                         ProductValidationService.cs (name/price/quantity/uniqueness —
-                         the one place every product/slot rule lives)
-    Vending/             VendingService.cs (insert/purchase/reset — the state
-                         transitions, incl. the compute-then-commit Purchase
-                         ordering), IChangeCalculator.cs, ChangeResult.cs,
-                         ChangeCalculationService.cs (bounded coin-change DP), dtos
-    State/               MachineStateService.cs (loading the catalogue into slots,
-                         assigning initial quantities, reload)
-    Abstractions/        IVendingMachineStore.cs, IExternalCatalogSource.cs
+    Abstractions/        IVendingMachineStore.cs, IExternalCatalogSource.cs,
+                         IChangeCalculator.cs
+    ServiceModels/       Service-layer data-transfer types, suffixed `ServiceModel`:
+                         ProductServiceModel.cs, ExternalProductServiceModel.cs,
+                         SessionServiceModel.cs, PurchaseResultServiceModel.cs,
+                         ReturnedCoinsServiceModel.cs, CoinCountServiceModel.cs,
+                         ChangeResultServiceModel.cs
+    Implementations/     ProductService.cs (CRUD), ProductValidationService.cs
+                         (name/price/quantity/uniqueness — the one place every
+                         product/slot rule lives), VendingService.cs
+                         (insert/purchase/reset — the state transitions, incl.
+                         the compute-then-commit Purchase ordering),
+                         ChangeCalculationService.cs (bounded coin-change DP),
+                         MachineStateService.cs (loading the catalogue into
+                         slots, assigning initial quantities, reload)
   VM.Server.Repository/            # mechanical only: storage lifecycle, file IO, DI wiring
     InMemory/            InMemoryVendingMachineStore.cs (lazy-load/lock/reload
                          orchestration; delegates "what loading means" to
@@ -274,6 +279,10 @@ src/vm-server/VM.Server/
   VM.Server.API/                   # Minimal API endpoints, DI, CORS, Swagger
     Endpoints/           ProductEndpoints.cs, VendingEndpoints.cs, ExternalEndpoints.cs
     Middleware/          ExceptionHandlingMiddleware.cs
+    DTO/                 API-boundary request/response types, suffixed
+                         `RequestDTO`/`ResponseDTO`: CreateProductRequestDTO.cs,
+                         UpdateProductRequestDTO.cs, InsertCoinRequestDTO.cs,
+                         PurchaseRequestDTO.cs, ErrorResponseDTO.cs
     Program.cs
   tests/
     VM.Server.Service.Tests/       # the only test project — see §4.3
@@ -291,17 +300,28 @@ Do not let ASP.NET types leak below `API`.
 - `Nullable` and `TreatWarningsAsErrors` enabled in `Directory.Build.props`;
   `ImplicitUsings` enabled; `LangVersion latest`.
 - File-scoped namespaces, one type per file, `sealed` by default.
-- Prefer `record` for DTOs and value objects, `class` for entities with identity.
+- Prefer `record` for data-transfer types and value objects, `class` for
+  entities with identity.
+- **Naming for data-transfer types, by which project owns them:**
+  `VM.Server.Service/ServiceModels/*ServiceModel.cs` for anything the Service
+  layer hands back to its callers (`ProductServiceModel`, `SessionServiceModel`,
+  etc.) and `VM.Server.API/DTO/*RequestDTO.cs`/`*ResponseDTO.cs` for the
+  API's own HTTP-boundary shapes (`CreateProductRequestDTO`,
+  `ErrorResponseDTO`). Never mix the two suffixes across the boundary — a
+  type crossing from Service into API keeps its `ServiceModel` name; API
+  endpoints only construct a `RequestDTO`/`ResponseDTO` for shapes Service has
+  no reason to own (see the decision log for which those are and why).
 - **Minimal APIs**, grouped with `MapGroup("/api/products")`, one extension
   method per endpoint group. No MVC controllers.
 - **Every rule, calculation and state transition lives in `VM.Server.Service`,
   nowhere else.** `Domain` entities are plain data (no validation, no guards,
   no behaviour methods); `Repository` is mechanical (storage lifecycle, file
-  IO); `API` only maps HTTP ⇄ Service DTOs and error codes ⇄ status codes.
-  Validation throws `DomainException` carrying an `ErrorCode`; the exception
-  middleware maps it to the §3.3 shape. Do not return raw `ProblemDetails`,
-  and do not add a validation check, calculation, or guard anywhere outside
-  `VM.Server.Service` — if you find one, that's the bug, not a shortcut.
+  IO); `API` only maps HTTP ⇄ Service service models and error codes ⇄ status
+  codes. Validation throws `DomainException` carrying an `ErrorCode`; the
+  exception middleware maps it to the §3.3 shape. Do not return raw
+  `ProblemDetails`, and do not add a validation check, calculation, or guard
+  anywhere outside `VM.Server.Service` — if you find one, that's the bug, not
+  a shortcut.
 - Domain entities' mutable properties use `internal set` (with
   `InternalsVisibleTo` scoped to `VM.Server.Service`/`VM.Server.Repository`/
   `VM.Server.Service.Tests`), so `VM.Server.Service` is the only safe way to

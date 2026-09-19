@@ -2,7 +2,7 @@ using VM.Server.Domain;
 using VM.Server.Domain.Entities;
 using VM.Server.Domain.Errors;
 using VM.Server.Service.Abstractions;
-using VM.Server.Service.DTOs;
+using VM.Server.Service.ServiceModels;
 
 namespace VM.Server.Service.Implementations;
 
@@ -23,28 +23,28 @@ public sealed class VendingService(IVendingMachineStore store, IChangeCalculator
         return Task.FromResult<IReadOnlyList<int>>(denominations);
     }
 
-    public Task<SessionDto> GetSessionAsync(CancellationToken cancellationToken = default) =>
-        store.AccessAsync(ToSessionDto, cancellationToken);
+    public Task<SessionServiceModel> GetSessionAsync(CancellationToken cancellationToken = default) =>
+        store.AccessAsync(ToSessionServiceModel, cancellationToken);
 
-    public Task<SessionDto> InsertCoinAsync(int denominationCents, CancellationToken cancellationToken = default) =>
+    public Task<SessionServiceModel> InsertCoinAsync(int denominationCents, CancellationToken cancellationToken = default) =>
         store.AccessAsync(
             machine =>
             {
                 InsertCoin(machine, denominationCents);
-                return ToSessionDto(machine);
+                return ToSessionServiceModel(machine);
             },
             cancellationToken);
 
-    public Task<PurchaseResultDto> PurchaseAsync(Guid productId, CancellationToken cancellationToken = default) =>
-        store.AccessAsync(machine => ToPurchaseResultDto(Purchase(machine, productId)), cancellationToken);
+    public Task<PurchaseResultServiceModel> PurchaseAsync(Guid productId, CancellationToken cancellationToken = default) =>
+        store.AccessAsync(machine => ToPurchaseResultServiceModel(Purchase(machine, productId)), cancellationToken);
 
-    public Task<ReturnedCoinsDto> ResetAsync(CancellationToken cancellationToken = default) =>
+    public Task<ReturnedCoinsServiceModel> ResetAsync(CancellationToken cancellationToken = default) =>
         store.AccessAsync(
             machine =>
             {
                 var totalBeforeReset = machine.InsertedTotalCents;
                 var returnedCoins = ReturnInsertedCoins(machine);
-                return new ReturnedCoinsDto(ToSortedCoinList(returnedCoins), totalBeforeReset);
+                return new ReturnedCoinsServiceModel(ToSortedCoinList(returnedCoins), totalBeforeReset);
             },
             cancellationToken);
 
@@ -148,26 +148,26 @@ public sealed class VendingService(IVendingMachineStore store, IChangeCalculator
         return merged;
     }
 
-    private static SessionDto ToSessionDto(VendingMachine machine) =>
+    private static SessionServiceModel ToSessionServiceModel(VendingMachine machine) =>
         new(ToSortedCoinList(machine.InsertedCoins.Counts), machine.InsertedTotalCents);
 
-    private static PurchaseResultDto ToPurchaseResultDto(PurchaseResult result) =>
+    private static PurchaseResultServiceModel ToPurchaseResultServiceModel(PurchaseResult result) =>
         new(
-            ToProductDto(result.Slot),
+            ToProductServiceModel(result.Slot),
             result.PaidCents,
             result.PriceCents,
             result.ChangeCents,
             ToSortedCoinList(result.ChangeCoins));
 
-    private static ProductDto ToProductDto(Slot slot) =>
+    private static ProductServiceModel ToProductServiceModel(Slot slot) =>
         new(slot.Product.Id, slot.Product.Name, slot.Product.PriceCents, slot.Quantity, slot.Product.ImageUrl);
 
-    private static IReadOnlyList<CoinCountDto> ToSortedCoinList(IReadOnlyDictionary<int, int> coins)
+    private static IReadOnlyList<CoinCountServiceModel> ToSortedCoinList(IReadOnlyDictionary<int, int> coins)
     {
-        var list = new List<CoinCountDto>(coins.Count);
+        var list = new List<CoinCountServiceModel>(coins.Count);
         foreach (var (denomination, count) in coins)
         {
-            list.Add(new CoinCountDto(denomination, count));
+            list.Add(new CoinCountServiceModel(denomination, count));
         }
 
         list.Sort((a, b) => b.DenominationCents.CompareTo(a.DenominationCents));

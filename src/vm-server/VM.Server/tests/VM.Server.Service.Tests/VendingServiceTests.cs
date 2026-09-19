@@ -5,7 +5,7 @@ using VM.Server.Domain.Entities;
 using VM.Server.Domain.Errors;
 using VM.Server.Repository.InMemory;
 using VM.Server.Service.Abstractions;
-using VM.Server.Service.DTOs;
+using VM.Server.Service.ServiceModels;
 using VM.Server.Service.Implementations;
 
 namespace VM.Server.Service.Tests;
@@ -146,7 +146,7 @@ public class VendingServiceTests
 
         var result = await service.PurchaseAsync(product.Id);
 
-        result.ChangeCoins.Should().Equal(new CoinCountDto(20, 3));
+        result.ChangeCoins.Should().Equal(new CoinCountServiceModel(20, 3));
     }
 
     [Fact]
@@ -258,7 +258,7 @@ public class VendingServiceTests
         var result = await service.ResetAsync();
 
         result.ReturnedTotalCents.Should().Be(305);
-        result.ReturnedCoins.Should().Equal(new CoinCountDto(200, 1), new CoinCountDto(50, 2), new CoinCountDto(5, 1));
+        result.ReturnedCoins.Should().Equal(new CoinCountServiceModel(200, 1), new CoinCountServiceModel(50, 2), new CoinCountServiceModel(5, 1));
 
         var sessionAfterReset = await service.GetSessionAsync();
         sessionAfterReset.InsertedTotalCents.Should().Be(0);

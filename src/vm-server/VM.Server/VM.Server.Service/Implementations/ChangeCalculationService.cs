@@ -1,6 +1,6 @@
 using VM.Server.Domain;
 using VM.Server.Service.Abstractions;
-using VM.Server.Service.DTOs;
+using VM.Server.Service.ServiceModels;
 
 namespace VM.Server.Service.Implementations;
 
@@ -19,7 +19,7 @@ public sealed class ChangeCalculationService : IChangeCalculator
 {
     private const int Unreachable = int.MaxValue;
 
-    public ChangeResultDto Calculate(int amountCents, IReadOnlyDictionary<int, int> availableCoins)
+    public ChangeResultServiceModel Calculate(int amountCents, IReadOnlyDictionary<int, int> availableCoins)
     {
         ArgumentNullException.ThrowIfNull(availableCoins);
         if (amountCents < 0)
@@ -29,7 +29,7 @@ public sealed class ChangeCalculationService : IChangeCalculator
 
         if (amountCents == 0)
         {
-            return ChangeResultDto.Made(new Dictionary<int, int>());
+            return ChangeResultServiceModel.Made(new Dictionary<int, int>());
         }
 
         // Ascending order matters: it makes the largest denomination the last
@@ -99,7 +99,7 @@ public sealed class ChangeCalculationService : IChangeCalculator
 
         if (dp[layerCount, amountCents] == Unreachable)
         {
-            return ChangeResultDto.NotPossible();
+            return ChangeResultServiceModel.NotPossible();
         }
 
         var coins = new Dictionary<int, int>();
@@ -116,6 +116,6 @@ public sealed class ChangeCalculationService : IChangeCalculator
             remainingAmount -= k * denomination;
         }
 
-        return ChangeResultDto.Made(coins);
+        return ChangeResultServiceModel.Made(coins);
     }
 }

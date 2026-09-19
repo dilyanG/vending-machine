@@ -1,21 +1,21 @@
 using VM.Server.Domain.Entities;
 using VM.Server.Domain.Errors;
 using VM.Server.Service.Abstractions;
-using VM.Server.Service.DTOs;
+using VM.Server.Service.ServiceModels;
 
 namespace VM.Server.Service.Implementations;
 
 public sealed class ProductService(IVendingMachineStore store, ProductValidationService validation)
 {
-    public Task<IReadOnlyList<ProductDto>> ListAsync(CancellationToken cancellationToken = default) =>
+    public Task<IReadOnlyList<ProductServiceModel>> ListAsync(CancellationToken cancellationToken = default) =>
         store.AccessAsync(
-            machine => (IReadOnlyList<ProductDto>)machine.Slots.Values.Select(ToDto).ToList(),
+            machine => (IReadOnlyList<ProductServiceModel>)machine.Slots.Values.Select(ToProductServiceModel).ToList(),
             cancellationToken);
 
-    public Task<ProductDto> GetAsync(Guid id, CancellationToken cancellationToken = default) =>
-        store.AccessAsync(machine => ToDto(FindSlotOrThrow(machine, id)), cancellationToken);
+    public Task<ProductServiceModel> GetAsync(Guid id, CancellationToken cancellationToken = default) =>
+        store.AccessAsync(machine => ToProductServiceModel(FindSlotOrThrow(machine, id)), cancellationToken);
 
-    public Task<ProductDto> CreateAsync(
+    public Task<ProductServiceModel> CreateAsync(
         string name, int priceCents, int quantity, string? imageUrl, CancellationToken cancellationToken = default) =>
         store.AccessAsync(
             machine =>
@@ -29,11 +29,11 @@ public sealed class ProductService(IVendingMachineStore store, ProductValidation
 
                 var slot = new Slot { Product = product, Quantity = quantity };
                 machine.Slots[product.Id] = slot;
-                return ToDto(slot);
+                return ToProductServiceModel(slot);
             },
             cancellationToken);
 
-    public Task<ProductDto> UpdateAsync(
+    public Task<ProductServiceModel> UpdateAsync(
         Guid id, string name, int priceCents, int quantity, string? imageUrl, CancellationToken cancellationToken = default) =>
         store.AccessAsync(
             machine =>
@@ -52,7 +52,7 @@ public sealed class ProductService(IVendingMachineStore store, ProductValidation
                 var updatedProduct = new Product { Id = id, Name = validatedName, PriceCents = priceCents, ImageUrl = imageUrl };
                 var slot = new Slot { Product = updatedProduct, Quantity = quantity };
                 machine.Slots[id] = slot;
-                return ToDto(slot);
+                return ToProductServiceModel(slot);
             },
             cancellationToken);
 
@@ -73,6 +73,6 @@ public sealed class ProductService(IVendingMachineStore store, ProductValidation
         machine.Slots.GetValueOrDefault(id)
             ?? throw new DomainException(ErrorCodes.ProductNotFound, $"No product with id '{id}' exists.");
 
-    private static ProductDto ToDto(Slot slot) =>
+    private static ProductServiceModel ToProductServiceModel(Slot slot) =>
         new(slot.Product.Id, slot.Product.Name, slot.Product.PriceCents, slot.Quantity, slot.Product.ImageUrl);
 }

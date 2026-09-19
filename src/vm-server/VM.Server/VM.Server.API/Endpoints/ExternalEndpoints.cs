@@ -1,4 +1,4 @@
-using VM.Server.Service.DTOs;
+using VM.Server.Service.ServiceModels;
 using VM.Server.Domain.Entities;
 using VM.Server.Service.Abstractions;
 
@@ -11,7 +11,7 @@ public static class ExternalEndpoints
         var group = endpoints.MapGroup("/api/external");
 
         group.MapGet("/catalog", GetCatalogAsync)
-            .Produces<IReadOnlyList<ExternalProductDto>>();
+            .Produces<IReadOnlyList<ExternalProductServiceModel>>();
 
         return endpoints;
     }
@@ -20,15 +20,15 @@ public static class ExternalEndpoints
         IExternalCatalogSource catalogSource, CancellationToken cancellationToken)
     {
         var products = await catalogSource.GetCatalogueAsync(cancellationToken);
-        var response = new List<ExternalProductDto>(products.Count);
+        var response = new List<ExternalProductServiceModel>(products.Count);
         foreach (var product in products)
         {
-            response.Add(ToDto(product));
+            response.Add(ToExternalProductServiceModel(product));
         }
 
         return Results.Ok(response);
     }
 
-    private static ExternalProductDto ToDto(Product product) =>
+    private static ExternalProductServiceModel ToExternalProductServiceModel(Product product) =>
         new(product.Id, product.Name, product.PriceCents, product.ImageUrl);
 }

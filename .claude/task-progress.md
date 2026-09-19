@@ -274,6 +274,43 @@ above, not deleted.
       process (silently collapses repeated self-loops on one state to the
       last one defined; see the diagram file's own note and the decision
       log).
+- [x] `P9-13` Redrew `vending-state-machine.md` after the repo owner reported
+      overlapping labels — repo-owner-requested style: a classic
+      finite-state-automaton graph (circles for states, a diamond for the
+      `purchase` decision, an annotation node for `insertCoin` while
+      `CoinsHeld`) instead of a UML statechart. Root cause investigated, not
+      just patched by eye: confirmed with a minimal reproduction that
+      Mermaid's self-loop-collapsing bug affects `flowchart` exactly like
+      `stateDiagram-v2` (see decision log), and that the *remaining* overlap
+      (even a single safe self-loop on `CoinsHeld`) was pure layout crowding
+      from six edges converging on one node — fixed by pulling `insertCoin`'s
+      behaviour out into a dotted-line annotation node, which gave the layout
+      engine room to separate every other label. Verified rendered, and every
+      expected label's text confirmed present in the output SVG, exactly as
+      for the original diagrams.
+- [x] `P9-14` Two renames, repo-owner requested: `VM.Server.API/Requests/` →
+      `VM.Server.API/DTO/`, five types suffixed `RequestDTO`/`ResponseDTO`
+      (`CreateProductRequestDTO`, `UpdateProductRequestDTO`,
+      `InsertCoinRequestDTO`, `PurchaseRequestDTO`, `ErrorResponseDTO` —
+      the last one also fixing a pre-existing filename/type-name mismatch,
+      `ErrorResponseResponse.cs` containing `ErrorResponseDto`); and
+      `VM.Server.Service/DTOs/` → `VM.Server.Service/ServiceModels/`, seven
+      types suffixed `ServiceModel` (`ProductServiceModel`,
+      `ExternalProductServiceModel`, `SessionServiceModel`,
+      `PurchaseResultServiceModel`, `ReturnedCoinsServiceModel`,
+      `CoinCountServiceModel`, `ChangeResultServiceModel`). Private mapper
+      methods that returned the old `*Dto`-suffixed types (`ToDto`,
+      `ToSessionDto`, `ToPurchaseResultDto`, `ToProductDto`) renamed to match
+      (`ToProductServiceModel`, etc.) for internal consistency, not just the
+      public type names. `CLAUDE.md` §4.1/§4.2 updated (the layout section
+      was already stale from the interim `Products`/`Vending`/`State` →
+      `Abstractions`/`DTOs`/`Implementations` reorganisation done outside this
+      session — fixed both the pre-existing staleness and the new rename in
+      the same pass) with an explicit naming-convention rule so the two
+      suffixes don't drift back together. No wire-format change — JSON
+      property names come from record properties, not type names, so the
+      frontend contract is untouched. `dotnet build` clean (0 warnings),
+      85/85 tests green.
 
 ---
 
@@ -847,6 +884,54 @@ Format: `YYYY-MM-DD — decision — why — alternatives rejected`
   price) and `reset` from `Idle` just returns nothing. Reported explicitly in
   the diagram file rather than either drawn (three more edges document a case
   where nothing was ever at stake) or silently omitted.
+- `2026-09-19` — **`vending-state-machine.md` redrawn as a `flowchart`
+  automaton (circles + a diamond + an annotation node) instead of
+  `stateDiagram-v2`**, after the repo owner reported the statechart version's
+  labels overlapping on GitHub. Confirmed with a second minimal reproduction
+  that the self-loop-collapsing bug found in the P9-12 session is not
+  `stateDiagram-v2`-specific: `flowchart` collapses repeated self-loops on one
+  node the exact same way, confirmed down to the smallest case (two `A --> A`
+  edges with distinct labels still collapse to one, not just three or more).
+  But that bug wasn't the whole story here: after routing `purchase` through a
+  `<<choice>>`-equivalent decision node (already safe, one edge per outcome,
+  no self-loops), the labels *still* overlapped, because `stateDiagram-v2`'s
+  layout engine crammed a single legitimate self-loop (`insertCoin` while
+  `CoinsHeld`) right up against the four incoming `purchase` refusal edges on
+  the same small node - a pure layout-crowding problem, not a content-loss
+  one. Fixed by pulling that self-loop out entirely into a dotted-line
+  `coinNote` annotation node (`CoinsHeld -.- coinNote`), which is not a
+  self-loop at all (different source and target) and let the layout engine
+  give every remaining edge its own clear space. Tried and rejected first:
+  `%%{init: {'flowchart': {'nodeSpacing': ..., 'rankSpacing': ...}}}%%`
+  alone (a pure layout directive, not a themed colour, so not excluded by
+  CLAUDE.md's "no explicit colours or custom theme" rule) - it separated one
+  overlapping pair but not the other, confirming the problem was structural
+  (too many edges terminating at one node), not merely a spacing default.
+  Also tried plain `LR`/`TD` direction swaps alone - `TD` was strictly better
+  (self-loops render above/below the node instead of to the side, which
+  happened to clear the *first* overlap) but did not fix the second, again
+  pointing at edge count rather than orientation as the actual cause.
+- `2026-09-19` — **Two renames, both repo-owner requests, executed together
+  since they touch adjoining code**: `VM.Server.API/Requests/` → `.../DTO/`
+  (`*RequestDTO`/`*ResponseDTO`) and `VM.Server.Service/DTOs/` → `.../ServiceModels/`
+  (`*ServiceModel`). Found and fixed a pre-existing inconsistency while here,
+  not introduced by this change: `VM.Server.API/Requests/ErrorResponseResponse.cs`
+  held a type named `ErrorResponseDto` — a filename/type-name mismatch and a
+  stray "Response" left over from an earlier, apparently incomplete rename by
+  a different session. Renamed the file to match the type's actual role
+  (`ErrorResponseDTO.cs`, type `ErrorResponseDTO`) rather than preserving the
+  mismatch. Also renamed the private mapper methods that returned the old
+  `*Dto` types (`ToDto`, `ToSessionDto`, `ToPurchaseResultDto`, `ToProductDto`
+  across `ProductService`/`VendingService`/`ExternalEndpoints`) to match their
+  new return types — not explicitly requested, but leaving a method called
+  `ToProductDto` returning a `ProductServiceModel` would have been the exact
+  kind of stale-name drift the rename was meant to eliminate, and it cost
+  nothing extra since the same files were already open for the type rename.
+  `CLAUDE.md` §4.1 was already stale before this session (an interim,
+  unrelated reorganisation had moved `Products`/`Vending`/`State` into
+  `Abstractions`/`DTOs`/`Implementations` without updating the doc) - fixed
+  both the pre-existing staleness and the new rename in one pass rather than
+  documenting the rename on top of an already-wrong layout.
 
 ---
 
@@ -1363,3 +1448,25 @@ needs to know.
   `angular.json`'s stray CLI-written diff untouched, as before. Three
   commits, scope `docs`: one per diagram, one for the index/links/tracker
   update.
+- `2026-09-19` — `P9-13`/`P9-14`, two repo-owner requests handled together.
+  Diagram fix: rendered the existing `vending-state-machine.md` to a PNG and
+  visually confirmed the reported overlap first, rather than guessing at a
+  fix; root-caused it to two separate issues (a Mermaid self-loop-collapsing
+  bug that also affects `flowchart`, not just `stateDiagram-v2`, and separate
+  layout crowding from too many edges converging on `CoinsHeld`) through
+  several rendered iterations before landing on the automaton-style version
+  (circles, one diamond, one annotation node) — see the two new decision-log
+  entries. Renames: read every current consumer of the affected types first
+  (`grep -rln` across the whole backend, not assumed from memory, since
+  namespaces had moved again since the last session) before touching
+  anything, then `VM.Server.API/Requests/` → `.../DTO/` and
+  `VM.Server.Service/DTOs/` → `.../ServiceModels/` with `git mv` to preserve
+  rename history, content and using-directives updated with targeted `sed`
+  plus manual verification, and a `grep` sweep afterward confirming zero
+  stray references to any old type/namespace name anywhere in the solution.
+  `dotnet build` clean (0 warnings), 85/85 tests green after each rename
+  before moving to the next. `CLAUDE.md` §4.1 (already stale from an
+  unrelated interim reorganisation) and §4.2 (new naming-convention rule)
+  updated in the same pass. Frontend untouched — confirmed the rename is
+  wire-format-invisible (JSON property names come from record properties,
+  not type names) before treating it as backend-only.
