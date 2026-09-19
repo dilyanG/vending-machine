@@ -6,40 +6,47 @@ coin, purchase, reset) and the `ErrorCodes` it throws. **Product CRUD
 (create/update/delete/reload) is a separate concern and is excluded from this
 diagram** — see `ProductService`/`ProductValidationService` instead.
 
-Every transition below is labelled `event [guard] / effect`, held to
-consistently throughout — with one adaptation: `purchase` has four possible
-outcomes from the same state, so the event fires into a `purchase_check`
-decision point and each guarded outcome is labelled from there as `[guard] /
-effect` (the leading `purchase` is implied by having just come through the
-decision point). This is not just a stylistic choice — Mermaid's
-`stateDiagram-v2` renderer silently drops every self-loop on a state except
-the *last one defined*, so four separate `CoinsHeld → CoinsHeld` self-loops
-for `purchase`'s four outcomes would render as one (verified with
-`@mermaid-js/mermaid-cli`; see the note at the bottom of this file). Routing
-through a real decision node avoids that renderer bug while keeping every
-outcome its own labelled edge.
+Drawn as a classic finite-state-automaton graph rather than a UML statechart:
+states are circles, the one branching decision is a diamond, and every edge
+is a directed, individually labelled arrow — chosen after an earlier
+statechart-style version packed labels so tightly some of them overlapped
+illegibly (see the note at the bottom for why, and what changed).
+
+Every transition is labelled `event [guard] / effect`, held to consistently
+throughout — with one adaptation: `purchase` has five possible outcomes from
+the same state, so the event fires into a `purchase requested` decision point
+and each guarded outcome is labelled from there as `[guard] / effect` (the
+leading `purchase` is implied by having just come through the decision
+point).
 
 ```mermaid
-stateDiagram-v2
-    [*] --> Idle
+%%{init: {'flowchart': {'nodeSpacing': 60, 'rankSpacing': 110}}}%%
+flowchart TD
+    start((" ")) --> Idle
+    Idle(("Idle<br/>no coins held"))
+    CoinsHeld(("CoinsHeld<br/>one or more<br/>coins held"))
+    purchase{{"purchase<br/>requested"}}
+    coinNote["insertCoin while CoinsHeld:<br/>[accepted] / accumulate coin<br/>[rejected] / INVALID_DENOMINATION"]
 
-    Idle: Idle — no coins in the session (insertedTotalCents == 0)
-    CoinsHeld: CoinsHeld — session holds one or more coins
+    Idle -- "insertCoin [accepted] / add coin" --> CoinsHeld
+    Idle -- "insertCoin [rejected] / INVALID_DENOMINATION" --> Idle
 
-    Idle --> Idle : insertCoin [denomination rejected] / INVALID_DENOMINATION, nothing added
-    Idle --> CoinsHeld : insertCoin [denomination accepted] / add coin to session
+    CoinsHeld -- "reset [] / return coins, clear session" --> Idle
+    CoinsHeld -.- coinNote
+    CoinsHeld -- "purchase" --> purchase
 
-    CoinsHeld --> CoinsHeld : insertCoin [accepted] / accumulate coin | [rejected] / INVALID_DENOMINATION, nothing added
-    CoinsHeld --> Idle : reset [] / return the exact coins inserted, clear session
-
-    CoinsHeld --> purchase_check : purchase
-    state purchase_check <<choice>>
-    purchase_check --> CoinsHeld : [product id unknown] / PRODUCT_NOT_FOUND
-    purchase_check --> CoinsHeld : [slot quantity == 0] / OUT_OF_STOCK
-    purchase_check --> CoinsHeld : [inserted < price] / INSUFFICIENT_FUNDS
-    purchase_check --> CoinsHeld : [inserted >= price, change impossible] / CHANGE_UNAVAILABLE
-    purchase_check --> Idle : [inserted >= price, change possible] / dispense, move coins into bank, pay out change, clear session
+    purchase -- "[product id unknown] / PRODUCT_NOT_FOUND" --> CoinsHeld
+    purchase -- "[slot quantity == 0] / OUT_OF_STOCK" --> CoinsHeld
+    purchase -- "[inserted < price] / INSUFFICIENT_FUNDS" --> CoinsHeld
+    purchase -- "[inserted >= price, change impossible] / CHANGE_UNAVAILABLE" --> CoinsHeld
+    purchase -- "[inserted >= price, change possible] / dispense + change + clear session" --> Idle
 ```
+
+The dotted line to `insertCoin while CoinsHeld` is not a state transition —
+it is an annotation. Inserting a coin while `CoinsHeld` never changes which
+state you're in (you were already in `CoinsHeld` and you still are), only
+what the session holds, so it is documented as a note beside the state
+rather than drawn as a loop back onto an already busy node.
 
 ## States
 
@@ -65,7 +72,8 @@ stateDiagram-v2
 funds sufficient, change computable — before it touches any state; a
 `DomainException` from any check exits the method immediately, so there is
 nothing to undo and the session's coins are simply still there afterwards,
-exactly as the customer left them.
+exactly as the customer left them. Every refusal arrow above lands back on
+`CoinsHeld`, never `Idle` — the customer's money stays theirs.
 
 ## Transitions the code allows that this diagram simplifies away
 
@@ -77,29 +85,43 @@ exactly as the customer left them.
   every valid product) — every one of them an `Idle → Idle` no-op, since there
   was nothing in the session to lose. `CHANGE_UNAVAILABLE` cannot happen from
   `Idle`: it only arises once change is owed, which requires
-  `insertedTotalCents > priceCents`. Wiring `Idle` into the same
-  `purchase_check` decision point would be mechanically easy, but it would add
-  three more edges to document a case that is, by definition, uninteresting
-  (nothing was at stake, nothing changes) — so it is reported here instead of
-  drawn.
+  `insertedTotalCents > priceCents`. Wiring `Idle` into the same `purchase`
+  decision point would be mechanically easy, but it would add three more
+  edges to document a case that is, by definition, uninteresting (nothing was
+  at stake, nothing changes) — so it is reported here instead of drawn.
 - **`reset` from `Idle`.** `VendingService.ResetAsync` has no guard either; it
   can be called with an empty session and simply returns an empty coin list
   and a total of `0`. Real, but a true no-op, so it is described here rather
   than drawn as a third state or a distracting extra self-loop.
 
-## A Mermaid rendering limitation this diagram had to design around
+## Why this isn't drawn as a UML statechart, and a Mermaid limitation behind that
 
-`stateDiagram-v2` collapses multiple self-loop transitions on the *same*
-state down to only the last one defined in source order — confirmed with a
-minimal reproduction rendered through `@mermaid-js/mermaid-cli` (three
-`A --> A` self-loops with distinct labels rendered as one). It does **not**
-affect multiple edges between two *different* states, even when they share
-the same source and target repeatedly. That is why `purchase`'s four outcomes
-route through the `purchase_check` choice pseudostate (each outcome is then
-`purchase_check → CoinsHeld`/`Idle`, never a self-loop) instead of being drawn
-as four direct `CoinsHeld → CoinsHeld` arrows, and why `insertCoin`'s two
-outcomes while `CoinsHeld` are combined onto one self-loop with a single
-`|`-separated label instead of two separate arrows. Every rendered SVG was
-inspected for the actual text content, not just a clean exit code, precisely
-because this failure mode produces no error and no warning — it just quietly
-throws diagram content away.
+The first version of this diagram used Mermaid's `stateDiagram-v2` (UML
+statechart notation: rounded rectangles, a `<<choice>>` pseudostate for the
+`purchase` branch) and read correctly in isolation, but rendered with several
+edge labels overlapping illegibly once GitHub laid it out — `purchase`'s four
+outcomes and `insertCoin`'s two both converged on the same small area next to
+`CoinsHeld`.
+
+Investigating why surfaced a real Mermaid bug, confirmed with a minimal
+reproduction rendered through `@mermaid-js/mermaid-cli`: **both**
+`stateDiagram-v2` **and** `flowchart` collapse multiple self-loop transitions
+on the *same* node down to only the last one defined in source order, with no
+error and no warning — three or even two `A --> A` edges with distinct
+labels render as one. It does **not** affect multiple edges between two
+*different* nodes, even when several share the same source and target. This
+is why `purchase`'s five outcomes are drawn from a real decision node
+(`purchase{{...}}`, never a self-loop) rather than as direct
+`CoinsHeld → CoinsHeld` arrows, and why `insertCoin`'s two outcomes while
+`CoinsHeld` are pulled out into the `coinNote` annotation instead of a second
+self-loop on `CoinsHeld` — a *single* self-loop there was safe from the
+collapsing bug, but still rendered squeezed against the four incoming
+`purchase` arrows on the same node, which is what actually produced the
+overlap. Moving to the automaton style (circles, a diamond, and an explicit
+annotation node) gave the layout engine enough room to separate every label
+cleanly.
+
+Every rendered SVG was inspected for its actual text content, not just a
+clean CLI exit code, precisely because this failure mode produces neither an
+error nor a warning — it just quietly throws diagram content away or crowds
+it into illegibility.
