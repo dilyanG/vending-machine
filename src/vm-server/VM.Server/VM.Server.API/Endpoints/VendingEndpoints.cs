@@ -1,5 +1,6 @@
-using VM.Server.API.Dtos;
-using VM.Server.Service.Vending;
+using VM.Server.API.DTO;
+using VM.Server.Service.ServiceModels;
+using VM.Server.Service.Implementations;
 
 namespace VM.Server.API.Endpoints;
 
@@ -13,20 +14,20 @@ public static class VendingEndpoints
             .Produces<IReadOnlyList<int>>();
 
         group.MapGet("/session", GetSessionAsync)
-            .Produces<SessionDto>();
+            .Produces<SessionServiceModel>();
 
         group.MapPost("/coins", InsertCoinAsync)
-            .Produces<SessionDto>()
-            .Produces<ErrorResponseDto>(StatusCodes.Status400BadRequest);
+            .Produces<SessionServiceModel>()
+            .Produces<ErrorResponseDTO>(StatusCodes.Status400BadRequest);
 
         group.MapPost("/purchase", PurchaseAsync)
-            .Produces<PurchaseResultDto>()
-            .Produces<ErrorResponseDto>(StatusCodes.Status400BadRequest)
-            .Produces<ErrorResponseDto>(StatusCodes.Status404NotFound)
-            .Produces<ErrorResponseDto>(StatusCodes.Status422UnprocessableEntity);
+            .Produces<PurchaseResultServiceModel>()
+            .Produces<ErrorResponseDTO>(StatusCodes.Status400BadRequest)
+            .Produces<ErrorResponseDTO>(StatusCodes.Status404NotFound)
+            .Produces<ErrorResponseDTO>(StatusCodes.Status422UnprocessableEntity);
 
         group.MapPost("/reset", ResetAsync)
-            .Produces<ReturnedCoinsDto>();
+            .Produces<ReturnedCoinsServiceModel>();
 
         return endpoints;
     }
@@ -38,11 +39,11 @@ public static class VendingEndpoints
         Results.Ok(await vending.GetSessionAsync(cancellationToken));
 
     private static async Task<IResult> InsertCoinAsync(
-        InsertCoinRequest request, VendingService vending, CancellationToken cancellationToken) =>
+        InsertCoinRequestDTO request, VendingService vending, CancellationToken cancellationToken) =>
         Results.Ok(await vending.InsertCoinAsync(request.DenominationCents, cancellationToken));
 
     private static async Task<IResult> PurchaseAsync(
-        PurchaseRequest request, VendingService vending, CancellationToken cancellationToken) =>
+        PurchaseRequestDTO request, VendingService vending, CancellationToken cancellationToken) =>
         Results.Ok(await vending.PurchaseAsync(request.ProductId, cancellationToken));
 
     private static async Task<IResult> ResetAsync(VendingService vending, CancellationToken cancellationToken) =>

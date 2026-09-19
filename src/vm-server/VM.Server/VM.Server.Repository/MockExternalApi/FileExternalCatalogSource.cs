@@ -35,7 +35,7 @@ public sealed class FileExternalCatalogSource(string filePath) : IExternalCatalo
         }
 
         return entries
-            .Select(entry => Product.Restore(entry.Id, entry.Name, entry.PriceCents, entry.ImageUrl))
+            .Select(entry => new Product { Id = entry.Id, Name = entry.Name, PriceCents = entry.PriceCents, ImageUrl = entry.ImageUrl })
             .ToList();
     }
 

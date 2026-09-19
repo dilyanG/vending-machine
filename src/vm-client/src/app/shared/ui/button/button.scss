@@ -80,6 +80,16 @@
   background: color-mix(in srgb, var(--danger) 88%, black);
 }
 
+.vm-button--warning {
+  background: var(--warning-surface);
+  border-color: var(--warning-border);
+  color: var(--warning-text);
+}
+
+.vm-button--warning:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--warning-surface) 88%, black);
+}
+
 .vm-button--loading {
   position: relative;
 }

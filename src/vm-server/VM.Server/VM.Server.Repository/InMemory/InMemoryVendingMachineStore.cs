@@ -1,11 +1,12 @@
 using Microsoft.Extensions.Options;
 using VM.Server.Domain.Entities;
 using VM.Server.Service.Abstractions;
+using VM.Server.Service.Implementations;
 
 namespace VM.Server.Repository.InMemory;
 
 public sealed class InMemoryVendingMachineStore(
-    IExternalCatalogSource catalogSource, IOptions<VendingMachineOptions> options) : IVendingMachineStore
+    MachineStateService machineState, IOptions<VendingMachineOptions> options) : IVendingMachineStore
 {
     private readonly VendingMachineOptions _options = options.Value;
     private readonly SemaphoreSlim _gate = new(1, 1);
@@ -54,9 +55,6 @@ public sealed class InMemoryVendingMachineStore(
         return _machine;
     }
 
-    private async Task<VendingMachine> LoadMachineAsync(CancellationToken cancellationToken)
-    {
-        var catalogue = await catalogSource.GetCatalogueAsync(cancellationToken);
-        return VendingMachine.Load(catalogue, _options.CoinBank, _options.InitialQuantityPerSlot);
-    }
+    private Task<VendingMachine> LoadMachineAsync(CancellationToken cancellationToken) =>
+        machineState.LoadMachineAsync(_options.CoinBank, _options.InitialQuantityPerSlot, cancellationToken);
 }

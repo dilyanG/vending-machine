@@ -9,7 +9,8 @@ the same commit as the work it describes. Rules: `CLAUDE.md` §7.
 
 ## Next up
 
-1. `P9-1` … `P9-9` — polish, verification, handover
+1. `P9-1` … `P9-9` — polish, verification, handover (now running against the
+   post-service-layer-refactor code — see the new phase above P9)
 
 ## Open questions
 
@@ -34,17 +35,32 @@ log for the scope-boundary calls (name/price uniqueness live in P3, not here).
 **Reopened** before P3 for an aggregate-root restructuring — see `P1-6`…`P1-8`
 below and the decision log. `CoinBundle`/`P1-3` superseded.
 
+- [-] `P1-1` `Product` entity's own guards (`Create`/`Restore` validating
+      name/price) — **superseded by the service-layer refactor** (2026-09-18,
+      see decision log): moved to `ProductValidationService`; `Product` is now
+      plain data with no factories or validation of its own.
 - [x] `P1-6` `Slot` entity (product + quantity, `Dispense`/`Restock`);
-      `Quantity` removed from `Product`, which is now pure catalogue data
+      `Quantity` removed from `Product`, which is now pure catalogue data —
+      **superseded by the service-layer refactor** (2026-09-18): `Dispense`/
+      `Restock`'s validation moved to `ProductValidationService`/`VendingService`;
+      `Slot` is now plain data.
 - [-] `P1-3` `CoinBundle` immutable value object — **superseded by `P1-8`**:
       the aggregate root makes rollback (and therefore persistent/immutable
       coin collections) unnecessary; replaced by mutable `CoinInventory`
 - [x] `P1-7` `VendingMachine` aggregate root: owns slots, bank and session;
       compute-then-commit `Purchase` (no rollback code); `Reset`; slot CRUD
       for P3; id-uniqueness/price-distinctness enforced across slots;
-      `IChangeCalculator`/`ChangeResult` declared (not implemented — P2)
+      `IChangeCalculator`/`ChangeResult` declared (not implemented — P2) —
+      **superseded by the service-layer refactor** (2026-09-18): all behaviour
+      (`Purchase`/`InsertCoin`/`Reset`/slot CRUD/uniqueness enforcement) moved
+      to `VendingService`/`ProductService`/`MachineStateService`/
+      `ProductValidationService`; `VendingMachine` is now plain data (slots +
+      bank + session), no longer an aggregate root in the DDD sense.
 - [x] `P1-8` `CoinInventory` mutable entity, replacing `CoinBundle`, used for
-      both the bank and the session's inserted coins
+      both the bank and the session's inserted coins — **superseded by the
+      service-layer refactor** (2026-09-18): `Add`/`Remove`/`AddAll`/`From`
+      and their validation moved to `VendingService`/`MachineStateService`;
+      `CoinInventory` is now a plain `Counts` dictionary wrapper.
 
 ### P2 — Change calculation `[x]`
 
@@ -54,6 +70,12 @@ larger-denomination tie-break), `ChangeResult` `Made`/`NotPossible`
 factories, the named 60c-from-{50:1,20:3} greedy-counterexample proof, 13
 tests incl. a Stopwatch performance test. `P2-1`…`P2-5` all done — see
 decision log for the algorithm/tie-break reasoning.
+
+- [-] `P2-2` `BoundedChangeCalculator` implemented inside `VM.Server.Domain/Services`
+      — **superseded by the service-layer refactor** (2026-09-18, see decision
+      log): moved verbatim (same DP, same comment) to
+      `VM.Server.Service.Vending.ChangeCalculationService`; `Domain/Services`
+      no longer exists. The algorithm and its 13 tests are unchanged.
 
 ### P3 — Service layer: products `[x]`
 
@@ -149,6 +171,57 @@ sticky-panel-overlap findings.
       the price round-trip through the real dialog) + 7 store specs
       (create/update/delete/reload without refetch, busy guard)
 
+### Service-layer refactor (backend, run before P9) `[x]`
+
+Not part of `IMPLEMENTATION_PLAN.md`'s original phase numbering — an explicit
+repo-owner request to flatten `VM.Server.Domain` to pure data and move every
+rule/calculation/state transition into `VM.Server.Service`, executed after P8
+and before P9 (P9 verifies final state, so it needed to run against the
+post-refactor code). Task ids below are new (`R-1`…`R-6`, not `P`-numbered,
+to avoid colliding with or renumbering the real plan); the domain tasks it
+supersedes (`P1-1`, `P1-6`, `P1-7`, `P1-8`, `P2-2`) are marked `[-]` in place
+above, not deleted.
+
+- [x] `R-1` Flattened `Product`/`Slot`/`CoinInventory`/`VendingMachine`/
+      `PurchaseResult` to plain data carriers (public properties, `internal set`
+      on mutable ones, no factories/guards/behaviour methods); deleted
+      `Domain/Services/` (`BoundedChangeCalculator`/`ChangeResult`/
+      `IChangeCalculator`) entirely. Added `Domain/AssemblyInfo.cs`
+      (`InternalsVisibleTo` scoped to `VM.Server.Service`/`VM.Server.Repository`/
+      `VM.Server.Service.Tests` only) so the API layer cannot bypass a service
+      by assigning a property directly. `CoinDenominations`/`ErrorCodes`/
+      `DomainException` kept as-is (already pure data).
+- [x] `R-2` `ChangeCalculationService` (Service/Vending) — the DP algorithm
+      moved verbatim, same greedy-counterexample comment, implementing a new
+      `IChangeCalculator` now owned by Service.
+- [x] `R-3` `ProductValidationService` (Service/Products) — name/price/quantity
+      validation plus `EnsureUnique` (id/name-ci/price, previously the
+      aggregate's `EnsureSlotInvariants`), the one place every product/slot
+      rule lives.
+- [x] `R-4` `MachineStateService` (Service/State, new folder — chosen over
+      folding into the store so the store stays purely mechanical) —
+      `LoadMachineAsync`: pulls the catalogue, validates/seeds the bank,
+      assigns every slot the configured initial quantity, enforces uniqueness
+      across the whole set. `InMemoryVendingMachineStore` now only owns *when*
+      to load (lazy/`SemaphoreSlim`-guarded/reload), not *how*.
+- [x] `R-5` `VendingService` rewritten to own `InsertCoin`/`Purchase`/`Reset`
+      directly against the plain-data `VendingMachine`, preserving the
+      compute-then-commit `Purchase` ordering exactly (find slot → check
+      stock → check funds → compute change → mutate only once all four pass) —
+      still no rollback code anywhere. `ProductService` rewritten to delegate
+      every rule to `ProductValidationService` before mutating `machine.Slots`
+      directly.
+- [x] `R-6` Deleted `VM.Server.Domain.Tests` and `VM.Server.API.Tests`
+      (removed from `VM.Server.slnx`); ported every behavioural assertion into
+      `VM.Server.Service.Tests` against the new service APIs — see decision
+      log for the two cases that couldn't be ported as-is and why, and for the
+      API-test-coverage trade-off now on the record. 85 tests total, all
+      green; solution-wide `dotnet build` clean (0 warnings — `TreatWarningsAsErrors`
+      still holds). Full curl happy path re-run live and diffed against the P5
+      baseline (denominations/products/insert/session/purchase/insert/reset/
+      404/422) — byte-identical apart from fresh GUIDs, confirming no
+      behaviour change.
+
 ### P9 — Polish, verification, handover `[ ]`
 
 - [ ] `P9-1` Manual pass over the final acceptance checklist
@@ -160,6 +233,84 @@ sticky-panel-overlap findings.
 - [ ] `P9-7` *(optional)* Docker + compose
 - [ ] `P9-8` *(optional)* GitHub Actions CI
 - [ ] `P9-9` Final pass over this file
+- [x] `P9-10` `vm-button` gained a `warning` variant (filled light-yellow/dark
+      text, muted amber in dark mode) and three new tokens
+      (`--warning-surface`/`--warning-border`/`--warning-text`, both themes);
+      wired to the products-admin Edit button (table row + mobile card, both
+      layouts) so it no longer reads as inactive next to Delete. Text/fill
+      contrast 8.54:1 light, 8.38:1 dark — both measured from the live
+      page's own computed styles, not assumed from the token values on
+      paper
+- [x] `P9-11` `vm-modal` centering fixed at the primitive (both the
+      add-product and reload-from-catalogue dialogs share the fix): the
+      global reset's `* { margin: 0 }` was silently cancelling native
+      `<dialog>`'s own UA-stylesheet `margin: auto` centering — reasserted
+      on `.vm-modal`. `max-height` moved from a `vh`-based calc to `85dvh`.
+      Found and fixed two knock-on bugs while verifying live, neither of
+      which would have been caught by inspection alone: (1) `.vm-modal__panel`'s
+      `max-height: 100%` silently resolved to nothing against the dialog's
+      `auto` height (percentage heights need a *definite*-height ancestor),
+      so the footer overflowed past the dialog's own bottom edge instead of
+      the body scrolling internally — fixed by making `.vm-modal[open]` a
+      flex container so the panel stretches via flex sizing instead; (2)
+      that fix's first attempt (`display: flex` unscoped) made every
+      *closed* dialog render inline in the page, since an unscoped author
+      rule beats the UA stylesheet's `dialog:not([open]) { display: none }`
+      regardless of specificity — rescoped to `.vm-modal[open]`. Skipped the
+      "two vending-page buttons" item from the same request — investigated
+      the page and found `vm-product-card` has exactly one button, no clean
+      pair of "two buttons on a card" exists; repo owner said to skip it
+      rather than guess
+- [x] `P9-12` Two Mermaid diagrams added under `docs/diagrams/`:
+      `vending-state-machine.md` (insert/purchase/reset, every refusal path
+      with its real error code, why a refusal preserves the session) and
+      `change-calculation.md` (the atomic purchase sequence, the bounded
+      coin-change DP's shape, the greedy counterexample). `docs/diagrams/README.md`
+      indexes both; linked from the main README's Design notes; `CLAUDE.md`
+      §8 now requires updating the matching diagram in the same commit as any
+      vending-transition or change-algorithm change. Both diagrams verified
+      to actually render (`@mermaid-js/mermaid-cli`), not just eyeballed —
+      caught and worked around a real Mermaid `stateDiagram-v2` bug in the
+      process (silently collapses repeated self-loops on one state to the
+      last one defined; see the diagram file's own note and the decision
+      log).
+- [x] `P9-13` Redrew `vending-state-machine.md` after the repo owner reported
+      overlapping labels — repo-owner-requested style: a classic
+      finite-state-automaton graph (circles for states, a diamond for the
+      `purchase` decision, an annotation node for `insertCoin` while
+      `CoinsHeld`) instead of a UML statechart. Root cause investigated, not
+      just patched by eye: confirmed with a minimal reproduction that
+      Mermaid's self-loop-collapsing bug affects `flowchart` exactly like
+      `stateDiagram-v2` (see decision log), and that the *remaining* overlap
+      (even a single safe self-loop on `CoinsHeld`) was pure layout crowding
+      from six edges converging on one node — fixed by pulling `insertCoin`'s
+      behaviour out into a dotted-line annotation node, which gave the layout
+      engine room to separate every other label. Verified rendered, and every
+      expected label's text confirmed present in the output SVG, exactly as
+      for the original diagrams.
+- [x] `P9-14` Two renames, repo-owner requested: `VM.Server.API/Requests/` →
+      `VM.Server.API/DTO/`, five types suffixed `RequestDTO`/`ResponseDTO`
+      (`CreateProductRequestDTO`, `UpdateProductRequestDTO`,
+      `InsertCoinRequestDTO`, `PurchaseRequestDTO`, `ErrorResponseDTO` —
+      the last one also fixing a pre-existing filename/type-name mismatch,
+      `ErrorResponseResponse.cs` containing `ErrorResponseDto`); and
+      `VM.Server.Service/DTOs/` → `VM.Server.Service/ServiceModels/`, seven
+      types suffixed `ServiceModel` (`ProductServiceModel`,
+      `ExternalProductServiceModel`, `SessionServiceModel`,
+      `PurchaseResultServiceModel`, `ReturnedCoinsServiceModel`,
+      `CoinCountServiceModel`, `ChangeResultServiceModel`). Private mapper
+      methods that returned the old `*Dto`-suffixed types (`ToDto`,
+      `ToSessionDto`, `ToPurchaseResultDto`, `ToProductDto`) renamed to match
+      (`ToProductServiceModel`, etc.) for internal consistency, not just the
+      public type names. `CLAUDE.md` §4.1/§4.2 updated (the layout section
+      was already stale from the interim `Products`/`Vending`/`State` →
+      `Abstractions`/`DTOs`/`Implementations` reorganisation done outside this
+      session — fixed both the pre-existing staleness and the new rename in
+      the same pass) with an explicit naming-convention rule so the two
+      suffixes don't drift back together. No wire-format change — JSON
+      property names come from record properties, not type names, so the
+      frontend contract is untouched. `dotnet build` clean (0 warnings),
+      85/85 tests green.
 
 ---
 
@@ -601,6 +752,186 @@ Format: `YYYY-MM-DD — decision — why — alternatives rejected`
   has no natural response body to promise since its entire job is
   discarding state, not returning it (callers needing the refreshed list
   already have `GET /api/products` for that).
+- `2026-09-18` — **Explicit repo-owner request: flatten `VM.Server.Domain` to
+  pure data and move every rule/calculation/state transition into
+  `VM.Server.Service`.** Honest accounting, gains and losses:
+  - **Gains**: one place per concern (`ProductValidationService` for every
+    product/slot rule, `ChangeCalculationService` for the DP, `VendingService`
+    for the state transitions, `MachineStateService` for what "loading" means)
+    instead of rules scattered across `Product`/`Slot`/`CoinInventory`/
+    `VendingMachine`'s own methods; a reviewer now reads *all* business rules
+    in one project instead of hunting through Domain entities too. Tests
+    consolidate the same way — one test project instead of three.
+  - **What it gives up**: **Domain entities can no longer enforce their own
+    invariants.** Before this refactor, `Product.Create(name, -5)` or
+    `Slot.Create(product, 99)` was *impossible to construct* — the invalid
+    state literally could not exist as an object. After it, `new Product { Id
+    = x, PriceCents = -5 }` compiles and runs fine; the entity itself asserts
+    nothing, offers no self-protection, and would silently hold nonsense data
+    if some future code path skipped `ProductValidationService`. `internal
+    set` plus `InternalsVisibleTo` narrows *who* can mutate (only
+    `VM.Server.Service`/`VM.Server.Repository`/their tests) but does not
+    *validate* anything — it is a visibility fence, not a guard. This is a
+    real trade of type-level safety for a simpler, more centralised call
+    graph; it is the correct trade only because every current caller of these
+    entities' setters is a Service-layer class that is disciplined about
+    calling `ProductValidationService`/`ChangeCalculationService` first — a
+    new caller added carelessly inside `VM.Server.Service` itself would not
+    be caught by the compiler the way it used to be.
+  - **What it also gives up**: deleting `VM.Server.API.Tests` (per explicit
+    instruction, its behavioural assertions ported into `VM.Server.Service.Tests`)
+    removes the only coverage of route spelling, JSON wire-shape (property
+    names, casing), the `DomainException.Code` → HTTP status mapping in
+    `ExceptionHandlingMiddleware`, and DI/composition-root wiring
+    (`AddVendingMachineBackend` actually resolving at the ASP.NET level). None
+    of that is business logic, so none of it belongs in
+    `VM.Server.Service.Tests` by this task's own scope — but it is real
+    coverage that existed and now doesn't. A route typo, a JSON casing
+    regression, or a status-code mapping mistake would currently only be
+    caught by the manual `curl` pass this refactor ran once, not by any
+    automated test. Flagged here rather than silently accepted.
+  - **Two test cases that could not be ported as literal equivalents** (both
+    exercised guard methods that no longer exist as public throwing APIs):
+    `CoinInventory.Remove_MoreThanAvailable_ThrowsDomainException` — the
+    invariant it protected (the bank can never be asked to pay out more of a
+    denomination than it holds) is now guaranteed by construction:
+    `ChangeCalculationService`'s DP bounds every returned count by the
+    availability it was given (proved by
+    `Calculate_ForARangeOfAmounts_OnSuccessCoinsSumExactlyAndRespectAvailability`),
+    and `VendingService.Purchase` only ever asks it to remove coins after
+    merging the inserted coins into the bank first — so a bank underflow is
+    now provably unreachable rather than defended against at the point of
+    removal. `CoinInventory.ToSnapshot_ReturnsADefensiveCopy` — `CoinInventory`
+    no longer offers a snapshot method; it's a plain `Dictionary<int,int>`
+    property, and callers that need an immutable view (the atomicity tests)
+    just copy it themselves (`new Dictionary<int,int>(machine.Bank.Counts)`).
+  - **Alternatives rejected**: keeping denomination-acceptance *validation*
+    (not the plain data-lookup `CoinDenominations.IsAccepted`) as a
+    throwing guard inside `Domain` — rejected because it's a business rule
+    (turns "not in the list" into `INVALID_DENOMINATION`), and the task's own
+    instruction was that Domain has zero guards; it now lives in
+    `VendingService.InsertCoinAsync` and (duplicated, ~6 lines) in
+    `MachineStateService` for validating the configured coin bank at load
+    time — accepted as a small, deliberate duplication rather than inventing
+    a sixth service the task didn't ask for. Folding `MachineStateService`
+    into `InMemoryVendingMachineStore` instead of a separate Service-layer
+    class — rejected because it would leave "what loading means" (uniqueness
+    enforcement, initial-quantity assignment) inside `Repository`, which the
+    task says should be mechanical only.
+- `2026-09-18` — **`vm-modal` fixed at the primitive for centering, not
+  patched at each call site** — the add-product and reload-from-catalogue
+  dialogs are both `vm-modal`; the actual bug (global reset's
+  `* { margin: 0 }` cancelling native `<dialog>`'s own `margin: auto`
+  centering) lives one level below either dialog, so the only correct fix
+  is in the shared primitive — rejected adding `margin: auto` (or worse, a
+  `position`/`transform` override) to each dialog's own host styles, which
+  would have "fixed" both call sites while leaving the primitive itself
+  broken for the next dialog someone adds.
+- `2026-09-18` — **`.vm-modal__panel`'s height comes from flexbox stretch
+  (`.vm-modal[open] { display: flex }` + `min-height: 0` on the panel), not
+  a percentage height** — found live, not by inspection: `max-height: 100%`
+  on the panel silently resolved to `none` because its ancestor (`.vm-modal`)
+  has no *definite* `height`, only `max-height` (a CSS percentage-height
+  rule, not an Angular bug) — the panel had no real height limit at all, and
+  its last child (the footer) rendered past the dialog's own bottom edge
+  instead of the body scrolling internally. Flexbox stretch sizing resolves
+  correctly against an auto/max-height flex container in a way percentage
+  heights do not — rejected giving the panel an explicit pixel/dvh height
+  (would need to exactly duplicate the dialog's own `85dvh` and drift the
+  moment one changed without the other).
+- `2026-09-18` — **The flex fix is scoped to `.vm-modal[open]`, not bare
+  `.vm-modal`** — the first attempt (`display: flex` on the plain class)
+  made every *closed* dialog render inline in the page: author styles
+  always win over User-Agent styles regardless of specificity, so an
+  unscoped `display: flex` silently overrode the browser's own
+  `dialog:not([open]) { display: none }` default. Caught live by a
+  full-page screenshot showing the (closed) reload-confirmation dialog's
+  text sitting in the normal page flow beneath the products table —
+  rejected trusting the earlier isolated centering/sizing checks alone,
+  which only ever looked at the *open* dialog and would never have
+  surfaced this.
+- `2026-09-18` — **Skipped the "two buttons on the vending-page cards"
+  request** rather than guessing — investigated the actual page first, as
+  instructed: `vm-product-card` has exactly one button (Buy, already
+  dynamically primary/secondary by affordability); the only other
+  persistent action button on the page is `vm-coin-slot`'s "Return coins",
+  which isn't inside a card at all. Asked which pair was meant; repo owner
+  said to skip it. No `vm-button` or template changes made for this part.
+- `2026-09-18` — **`vending-state-machine.md`'s `purchase` transition routes
+  through a `purchase_check` `<<choice>>` pseudostate instead of four direct
+  `CoinsHeld → CoinsHeld` self-loops, and `insertCoin`'s two outcomes while
+  `CoinsHeld` share one self-loop with a `|`-separated label instead of two
+  arrows** — not a style preference. Verified with a minimal reproduction
+  through `@mermaid-js/mermaid-cli` that `stateDiagram-v2` silently drops
+  every self-loop on a state except the last one defined in source order (no
+  error, no warning — the SVG just doesn't contain the earlier labels' text).
+  Cross-state edges, including several sharing the same source and target,
+  are unaffected. Rejected drawing the four purchase outcomes as direct
+  self-loops (would have silently rendered as one, exactly the "embarrassing
+  error box" the task warned about, except worse — no visible error at all)
+  and rejected a semicolon as the separator inside the combined `insertCoin`
+  label (also verified by minimal repro: `stateDiagram-v2` parses `;` as a
+  statement separator mid-label, splitting it into a malformed fragment).
+  Every diagram's rendered SVG was grepped for its expected text content, not
+  just checked for a clean CLI exit code, precisely because this failure mode
+  produces neither.
+- `2026-09-18` — **`purchase` from `Idle` and `reset` from `Idle` are real,
+  reachable no-op code paths, deliberately not drawn** in
+  `vending-state-machine.md` — neither `VendingService.PurchaseAsync` nor
+  `ResetAsync` guards against being called with an empty session; `purchase`
+  from `Idle` yields `PRODUCT_NOT_FOUND`/`OUT_OF_STOCK`/`INSUFFICIENT_FUNDS`
+  (never `CHANGE_UNAVAILABLE`, which requires funds already in excess of the
+  price) and `reset` from `Idle` just returns nothing. Reported explicitly in
+  the diagram file rather than either drawn (three more edges document a case
+  where nothing was ever at stake) or silently omitted.
+- `2026-09-19` — **`vending-state-machine.md` redrawn as a `flowchart`
+  automaton (circles + a diamond + an annotation node) instead of
+  `stateDiagram-v2`**, after the repo owner reported the statechart version's
+  labels overlapping on GitHub. Confirmed with a second minimal reproduction
+  that the self-loop-collapsing bug found in the P9-12 session is not
+  `stateDiagram-v2`-specific: `flowchart` collapses repeated self-loops on one
+  node the exact same way, confirmed down to the smallest case (two `A --> A`
+  edges with distinct labels still collapse to one, not just three or more).
+  But that bug wasn't the whole story here: after routing `purchase` through a
+  `<<choice>>`-equivalent decision node (already safe, one edge per outcome,
+  no self-loops), the labels *still* overlapped, because `stateDiagram-v2`'s
+  layout engine crammed a single legitimate self-loop (`insertCoin` while
+  `CoinsHeld`) right up against the four incoming `purchase` refusal edges on
+  the same small node - a pure layout-crowding problem, not a content-loss
+  one. Fixed by pulling that self-loop out entirely into a dotted-line
+  `coinNote` annotation node (`CoinsHeld -.- coinNote`), which is not a
+  self-loop at all (different source and target) and let the layout engine
+  give every remaining edge its own clear space. Tried and rejected first:
+  `%%{init: {'flowchart': {'nodeSpacing': ..., 'rankSpacing': ...}}}%%`
+  alone (a pure layout directive, not a themed colour, so not excluded by
+  CLAUDE.md's "no explicit colours or custom theme" rule) - it separated one
+  overlapping pair but not the other, confirming the problem was structural
+  (too many edges terminating at one node), not merely a spacing default.
+  Also tried plain `LR`/`TD` direction swaps alone - `TD` was strictly better
+  (self-loops render above/below the node instead of to the side, which
+  happened to clear the *first* overlap) but did not fix the second, again
+  pointing at edge count rather than orientation as the actual cause.
+- `2026-09-19` — **Two renames, both repo-owner requests, executed together
+  since they touch adjoining code**: `VM.Server.API/Requests/` → `.../DTO/`
+  (`*RequestDTO`/`*ResponseDTO`) and `VM.Server.Service/DTOs/` → `.../ServiceModels/`
+  (`*ServiceModel`). Found and fixed a pre-existing inconsistency while here,
+  not introduced by this change: `VM.Server.API/Requests/ErrorResponseResponse.cs`
+  held a type named `ErrorResponseDto` — a filename/type-name mismatch and a
+  stray "Response" left over from an earlier, apparently incomplete rename by
+  a different session. Renamed the file to match the type's actual role
+  (`ErrorResponseDTO.cs`, type `ErrorResponseDTO`) rather than preserving the
+  mismatch. Also renamed the private mapper methods that returned the old
+  `*Dto` types (`ToDto`, `ToSessionDto`, `ToPurchaseResultDto`, `ToProductDto`
+  across `ProductService`/`VendingService`/`ExternalEndpoints`) to match their
+  new return types — not explicitly requested, but leaving a method called
+  `ToProductDto` returning a `ProductServiceModel` would have been the exact
+  kind of stale-name drift the rename was meant to eliminate, and it cost
+  nothing extra since the same files were already open for the type rename.
+  `CLAUDE.md` §4.1 was already stale before this session (an interim,
+  unrelated reorganisation had moved `Products`/`Vending`/`State` into
+  `Abstractions`/`DTOs`/`Implementations` without updating the doc) - fixed
+  both the pre-existing staleness and the new rename in one pass rather than
+  documenting the rename on top of an already-wrong layout.
 
 ---
 
@@ -991,3 +1322,151 @@ needs to know.
   didn't exist, causing a 404 the moment a product without an image was
   rendered — added a simple placeholder SVG matching the seed assets' style
   (see decision log). Closes P8. Next: P9 (polish, verification, handover).
+- `2026-09-18` — Service-layer refactor (backend only, run before P9 per
+  explicit repo-owner request): flattened `Product`/`Slot`/`CoinInventory`/
+  `VendingMachine`/`PurchaseResult` to plain data (`internal set` + a new
+  `Domain/AssemblyInfo.cs` scoping `InternalsVisibleTo` to
+  `VM.Server.Service`/`VM.Server.Repository`/`VM.Server.Service.Tests`);
+  deleted `Domain/Services/` entirely. Moved its contents plus every rule
+  that used to live on the flattened entities into `VM.Server.Service`:
+  `ChangeCalculationService` (DP moved verbatim), `ProductValidationService`
+  (name/price/quantity/uniqueness — the one place for every product rule),
+  `MachineStateService` (new `Service/State/` folder — loading/reload logic,
+  chosen over folding into the store so `InMemoryVendingMachineStore` stays
+  mechanical), and a rewritten `VendingService`/`ProductService` that mutate
+  the plain-data `VendingMachine` directly. Preserved `Purchase`'s
+  compute-then-commit ordering exactly (find slot → stock → funds → change →
+  mutate only once all four pass) — still no rollback code anywhere, proven
+  by a re-verified atomicity test that snapshots slots/bank/session before
+  and after every refusal reason (`OUT_OF_STOCK`/`INSUFFICIENT_FUNDS`/
+  `CHANGE_UNAVAILABLE`/`PRODUCT_NOT_FOUND`). Deleted `VM.Server.Domain.Tests`
+  and `VM.Server.API.Tests` (removed from `VM.Server.slnx`); ported every
+  behavioural assertion into `VM.Server.Service.Tests` against the real
+  service APIs, including the named greedy-counterexample proof, the
+  200-coin performance test, all boundary tables, and the atomicity proof —
+  two cases (`CoinInventory`'s own `Remove`/`ToSnapshot` guard tests) could
+  not be ported as literal equivalents since the methods they exercised no
+  longer exist as public APIs; see the decision log for why the invariants
+  they protected are still provably held. 85 tests total, all green;
+  solution-wide `dotnet build` clean, 0 warnings (`TreatWarningsAsErrors`
+  still holds — no new packages, no MediatR/FluentValidation). Re-ran the
+  full P5 manual curl verification live end to end (denominations → insert
+  100/50/20 → session 170 → purchase Water 85c → paid 170/change 85 = 50+20+
+  10+5/quantity 10→9 → insert 200/10 → reset → session empty → 404
+  `PRODUCT_NOT_FOUND`, plus a second instance started with an empty coin
+  bank via env-var config override to force a live 422 `CHANGE_UNAVAILABLE`
+  with the session left untouched) and confirmed every response matches the
+  P5 baseline exactly (same shapes, same codes, same status codes — only the
+  product GUIDs differ, as expected). Updated `CLAUDE.md` §2.3/§2.4/§2.5/
+  §2.6/§4.1/§4.2/§4.3 to describe the new layout and to mark the
+  entity-enforced invariants as now service-enforced. Marked `P1-1`/`P1-6`/
+  `P1-7`/`P1-8`/`P2-2` `[-]` superseded in place (history kept, not deleted).
+  Being honest about the trade-off: Domain entities can no longer enforce
+  their own invariants (a real loss of type-level safety, mitigated only by
+  `internal set` narrowing *who* can mutate, not validating *what* gets
+  written), and deleting `VM.Server.API.Tests` removes all coverage of route
+  spelling, JSON wire-shape, the error-code-to-HTTP-status mapping, and DI
+  wiring — see the decision log for the full accounting. Does not touch the
+  frontend. Next: P9 (polish, verification, handover), now running against
+  this post-refactor backend.
+- `2026-09-18` — Four small frontend fixes requested ahead of the P9 pass
+  (`P9-10`/`P9-11`); one (`vm-button` `warning` variant) done fully, one
+  (`vm-modal` centering) done and expanded once live verification surfaced
+  two real knock-on bugs, one skipped on the repo owner's instruction after
+  I investigated and asked rather than guessed (see decision log for all
+  three). `P9-10`: added `warning` to `ButtonVariant`, three tokens in both
+  themes, wired to the products-admin Edit button (table row and mobile
+  card). `P9-11`: `vm-modal` centering, `max-height` moved to `85dvh`, plus
+  the panel-overflow and closed-dialog-visibility fixes found live (see
+  decision log) — neither would have been caught by lint, build, or the
+  existing test suite, since none of them exercise real geometry or the
+  UA/author-style cascade.
+
+  `lint`/`build` green; `test:ci` 124/124 (1 new: the `warning` variant
+  class). Grepped both changed component stylesheets for hex codes,
+  `rgb()`/`rgba()`, and `px` spacing values — zero hits beyond the
+  pre-existing 1-2px border/outline widths (not spacing-scale values, same
+  as every other primitive in `shared/ui`).
+
+  Manual verification, backend running, all done live:
+  - **Edit button contrast**: read the live computed `background-color`/
+    `color` off the actual rendered button (not the token values on paper)
+    in both themes — light 8.54:1, dark 8.38:1, both far past the 4.5:1
+    requirement. Screenshots of both themes saved.
+  - **Modal centering**: measured the actual dialog's left/right and top/
+    bottom gutters against the viewport at 320/375/768/1440px — horizontally
+    and vertically centered (gutters equal within rounding) at every width,
+    and fully within the viewport bounds at every width. The
+    reload-from-catalogue confirm dialog checked separately at 768px to
+    confirm the primitive-level fix covers both dialogs, not just the one
+    tested first.
+  - **Many validation errors still fit**: triggered all three of the
+    product form's validators at once (empty name, unparseable price,
+    quantity 16) at 375×700 — before the panel-sizing fix this measurably
+    pushed the footer 48px past the dialog's own bottom edge (caught via
+    `getBoundingClientRect()`, not visually); after the fix the panel's
+    height exactly matches the dialog's, the footer is fully visible, and
+    the body is measurably scrollable (`scrollHeight` 456 vs `clientHeight`
+    408). Screenshot saved showing all three inline errors with the footer
+    still pinned and visible.
+  - **Focus trap / Escape / restore**: an isolated check (fresh page load,
+    nothing else open first) confirmed 15 successive Tabs never left the
+    dialog, Escape closed it, and focus returned to the exact trigger
+    button handle captured before opening — all still intact after the
+    centering/sizing changes. (A combined run of every check in one script
+    showed a false "focus not restored" because an earlier section in that
+    *same script* had left a dialog open without closing it first — a
+    test-harness ordering bug, not a product regression; resolved by
+    re-running the check in isolation.)
+  - **Closed dialogs stay hidden**: read every `dialog.vm-modal`'s
+    `open`/computed-`display` at page load with nothing open — all three
+    (product form, delete confirm, reload confirm) correctly `open: false`/
+    `display: none`; a full-page screenshot confirmed no stray dialog
+    content bleeds into the page layout.
+
+  Backend state confirmed unchanged after verification (still the 6-product
+  seed) — none of the scripted checks completed a real form submission.
+  Two separate commits, scope `ui`: the button variant, and the modal fix
+  (they're unrelated changes, per the task's own instruction). Left
+  `angular.json`'s stray `"analytics": false` addition (an Angular-CLI-
+  written line, not something I changed) out of both commits — unrelated to
+  this task. A large, unrelated backend service-layer refactor was
+  mid-flight in the working tree from a concurrent session throughout this
+  turn; staged only the exact frontend files touched here, never a broad
+  `git add`, so none of it is in either commit.
+- `2026-09-18` — `P9-12`: read the current `VendingService`/
+  `ChangeCalculationService` fresh (namespaces had moved to
+  `VM.Server.Service.DTOs`/`.Implementations` since the last backend session
+  touched this repo — confirmed the business logic itself is unchanged, only
+  reorganised) before drawing anything, per the task's own instruction. Two
+  Mermaid diagrams added under `docs/diagrams/` (`vending-state-machine.md`,
+  `change-calculation.md`), an index README, and links from the main
+  README/`CLAUDE.md` §8 — see the phase entry above and the two decision-log
+  entries for what each diagram covers and the real Mermaid renderer bug
+  (silent self-loop collapsing on `stateDiagram-v2`) found and designed
+  around while verifying with `@mermaid-js/mermaid-cli`. Left
+  `angular.json`'s stray CLI-written diff untouched, as before. Three
+  commits, scope `docs`: one per diagram, one for the index/links/tracker
+  update.
+- `2026-09-19` — `P9-13`/`P9-14`, two repo-owner requests handled together.
+  Diagram fix: rendered the existing `vending-state-machine.md` to a PNG and
+  visually confirmed the reported overlap first, rather than guessing at a
+  fix; root-caused it to two separate issues (a Mermaid self-loop-collapsing
+  bug that also affects `flowchart`, not just `stateDiagram-v2`, and separate
+  layout crowding from too many edges converging on `CoinsHeld`) through
+  several rendered iterations before landing on the automaton-style version
+  (circles, one diamond, one annotation node) — see the two new decision-log
+  entries. Renames: read every current consumer of the affected types first
+  (`grep -rln` across the whole backend, not assumed from memory, since
+  namespaces had moved again since the last session) before touching
+  anything, then `VM.Server.API/Requests/` → `.../DTO/` and
+  `VM.Server.Service/DTOs/` → `.../ServiceModels/` with `git mv` to preserve
+  rename history, content and using-directives updated with targeted `sed`
+  plus manual verification, and a `grep` sweep afterward confirming zero
+  stray references to any old type/namespace name anywhere in the solution.
+  `dotnet build` clean (0 warnings), 85/85 tests green after each rename
+  before moving to the next. `CLAUDE.md` §4.1 (already stale from an
+  unrelated interim reorganisation) and §4.2 (new naming-convention rule)
+  updated in the same pass. Frontend untouched — confirmed the rename is
+  wire-format-invisible (JSON property names come from record properties,
+  not type names) before treating it as backend-only.

@@ -59,6 +59,12 @@ describe('Button', () => {
     expect(buttonEl().className).toContain('vm-button--md');
   });
 
+  it('applies the warning variant class', () => {
+    fixture.componentInstance.variant.set('warning');
+    fixture.detectChanges();
+    expect(buttonEl().className).toContain('vm-button--warning');
+  });
+
   it('lets a native click bubble through to the host', () => {
     buttonEl().click();
     expect(fixture.componentInstance.clicks()).toBe(1);

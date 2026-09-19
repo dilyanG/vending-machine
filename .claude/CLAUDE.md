@@ -85,14 +85,15 @@ but never decides).
   `INVALID_QUANTITY`.
 - Buying from a slot with `Quantity == 0` → `OUT_OF_STOCK`.
 - **Every slot's product id must be unique, and prices must be distinct across
-  slots** (an explicit requirement) — both enforced by the `VendingMachine`
-  aggregate itself, since it owns the whole collection of slots. Violation →
-  `DUPLICATE_PRODUCT` (id) / `DUPLICATE_PRICE`.
-- Product **names must also be unique** (case-insensitive) — `DUPLICATE_PRODUCT`
-  — enforced by `ProductService` in the Service layer (P3), which can see the
-  whole catalogue by name; the aggregate does not track name identity.
+  slots** (an explicit requirement), and product **names must also be unique**
+  (case-insensitive) — all three enforced by `ProductValidationService.EnsureUnique`
+  in the Service layer, called by both `ProductService` (CRUD) and
+  `MachineStateService` (initial load). Violation → `DUPLICATE_PRODUCT`
+  (id/name) / `DUPLICATE_PRICE`. *(Previously enforced by the `VendingMachine`
+  aggregate itself — see the service-layer refactor decision log entry: Domain
+  entities no longer validate themselves.)*
 - `priceCents` must be > 0 and a multiple of 5 (no price can be unmakeable from
-  the accepted denominations).
+  the accepted denominations) — enforced by `ProductValidationService.ValidatePrice`.
 
 ### 2.4 Change
 
@@ -100,7 +101,9 @@ but never decides).
   Change is computed against the *actual* coins available, not an infinite float.
 - Because the bank is finite, a greedy algorithm is **incorrect**. Use a
   **bounded coin-change** (dynamic programming) solution that minimises coin
-  count and returns "not possible" when exact change cannot be made.
+  count and returns "not possible" when exact change cannot be made —
+  `ChangeCalculationService` (Service layer; the algorithm itself is
+  unchanged from its original `Domain` home, just moved).
 - If exact change cannot be made: **the purchase is refused**, nothing is
   dispensed, the inserted coins are returned in full, and the API returns
   `CHANGE_UNAVAILABLE`.
@@ -114,27 +117,34 @@ but never decides).
 
 ### 2.5 Vending session
 
-- The `VendingMachine` aggregate root owns **all** vending state together:
-  the slots, the coin bank, and the current session's inserted coins. There is
-  one implicit session (single-user machine): inserted coins by denomination,
-  and the running `InsertedTotalCents`.
+- The `VendingMachine` type is a **plain data carrier** (slots, coin bank, and
+  the current session's inserted coins) — it owns all vending *state* together,
+  but no longer any *behaviour*. There is one implicit session (single-user
+  machine): inserted coins by denomination, and the running `InsertedTotalCents`.
+  `VendingService` (Service layer) owns every state transition below.
 - `InsertCoin` → adds one coin of the given denomination to the session.
 - `Purchase` → requires `InsertedTotalCents >= priceCents`, else
   `INSUFFICIENT_FUNDS`; requires the change calculator to be able to make
   exact change from the bank plus the inserted coins, else
   `CHANGE_UNAVAILABLE`. Every check happens *before* anything is mutated —
-  the slot is decremented, the inserted coins move into the bank, the change
-  coins leave it, and the session clears, all in one final step once every
-  check has passed. Because the aggregate validates everything before
-  mutating anything, a failed purchase is a no-op by construction — there is
-  no rollback code anywhere.
+  find slot → check stock → check funds → compute change → only if all four
+  succeed, mutate: the slot is decremented, the inserted coins move into the
+  bank, the change coins leave it, and the session clears, all in one final
+  step once every check has passed. Because `VendingService.Purchase`
+  validates everything before mutating anything, a failed purchase is a no-op
+  by construction — there is no rollback code anywhere.
 - `Reset` → returns the exact coins inserted (same denominations, not
   equivalent value) and clears the session. Reset **never** touches the bank or
   slots.
-- Every vending operation is **atomic** because the aggregate is the single
-  unit of consistency for all three pieces of state — there is no
-  cross-store coordination (and no lock) needed from the Service layer above
-  it.
+- Every vending operation is **atomic** because `IVendingMachineStore`
+  serialises every read/mutation of the single `VendingMachine` instance
+  through one `SemaphoreSlim` (Repository layer) — there is no cross-store
+  coordination needed from `VendingService`, only single-threaded access to
+  one object for the duration of one operation. *(Previously described as the
+  `VendingMachine` aggregate root owning its own atomicity — see the
+  service-layer refactor decision log entry: the aggregate is data now, so
+  atomicity is a property of how the store serialises access to it, not of
+  the type itself.)*
 
 ### 2.6 Seeding from the "external resource"
 
@@ -150,13 +160,17 @@ but never decides).
   missing or malformed.
 - It is exposed read-only at `GET /api/external/catalog` so a reviewer can see
   it is genuinely a separate source.
-- `InMemoryVendingMachineStore` (`IVendingMachineStore`) holds the single
-  `VendingMachine` aggregate for the app's lifetime. It loads from the
-  external source **once**, lazily, on first access — `SemaphoreSlim`-guarded
-  so concurrent first requests can't seed it twice — and the same guard
-  serialises every subsequent read or mutation into the aggregate.
-- CRUD mutates the in-memory aggregate **only**. The seed file is never
-  written.
+- `InMemoryVendingMachineStore` (`IVendingMachineStore`, Repository layer)
+  holds the single `VendingMachine` instance for the app's lifetime. It loads
+  from the external source **once**, lazily, on first access —
+  `SemaphoreSlim`-guarded so concurrent first requests can't seed it twice —
+  and the same guard serialises every subsequent read or mutation. What
+  "loading" means (pulling the catalogue, assigning every slot the same
+  configured starting quantity, seeding the bank, enforcing uniqueness across
+  the whole set) is `MachineStateService.LoadMachineAsync` (Service layer) —
+  the store only owns *when* to load, not *how*.
+- CRUD mutates the in-memory `VendingMachine` **only**, via `ProductService`.
+  The seed file is never written.
 - `POST /api/products/reload` re-seeds from the external resource (discarding
   in-memory changes) — useful for demos and tests.
 
@@ -233,44 +247,86 @@ HTTP mapping: `400` validation/business rule, `404` not found, `409` conflict
 src/vm-server/VM.Server/
   VM.Server.slnx
   Directory.Build.props
-  VM.Server.Domain/                # entities, rules. No deps.
+  VM.Server.Domain/                # data only. No deps, no behaviour, no validation.
     Entities/            Product.cs, Slot.cs, CoinInventory.cs,
-                         VendingMachine.cs (aggregate root), PurchaseResult.cs
-    CoinDenominations.cs
-    Services/            IChangeCalculator.cs, ChangeResult.cs, BoundedChangeCalculator.cs
+                         VendingMachine.cs, PurchaseResult.cs — all plain data
+                         carriers: public properties, internal setters where
+                         mutable, no factories, no guards.
+    CoinDenominations.cs # the accepted-denominations list + MaxQuantityPerProduct (data)
     Errors/              DomainException.cs, ErrorCodes.cs
-  VM.Server.Service/               # use cases + abstractions. Depends on Domain only.
-    Products/            ProductService.cs, ProductDto.cs
-    Vending/             VendingService.cs, dtos                       # P4
-    Abstractions/        IVendingMachineStore.cs, IExternalCatalogSource.cs
-  VM.Server.Repository/            # implementations: in-memory store, mock external API
-    InMemory/            InMemoryVendingMachineStore.cs, VendingMachineOptions.cs
+    AssemblyInfo.cs      # InternalsVisibleTo Service/Repository/Service.Tests only
+  VM.Server.Service/               # ALL business logic lives here. Depends on Domain only.
+    Abstractions/        IVendingMachineStore.cs, IExternalCatalogSource.cs,
+                         IChangeCalculator.cs
+    ServiceModels/       Service-layer data-transfer types, suffixed `ServiceModel`:
+                         ProductServiceModel.cs, ExternalProductServiceModel.cs,
+                         SessionServiceModel.cs, PurchaseResultServiceModel.cs,
+                         ReturnedCoinsServiceModel.cs, CoinCountServiceModel.cs,
+                         ChangeResultServiceModel.cs
+    Implementations/     ProductService.cs (CRUD), ProductValidationService.cs
+                         (name/price/quantity/uniqueness — the one place every
+                         product/slot rule lives), VendingService.cs
+                         (insert/purchase/reset — the state transitions, incl.
+                         the compute-then-commit Purchase ordering),
+                         ChangeCalculationService.cs (bounded coin-change DP),
+                         MachineStateService.cs (loading the catalogue into
+                         slots, assigning initial quantities, reload)
+  VM.Server.Repository/            # mechanical only: storage lifecycle, file IO, DI wiring
+    InMemory/            InMemoryVendingMachineStore.cs (lazy-load/lock/reload
+                         orchestration; delegates "what loading means" to
+                         MachineStateService), VendingMachineOptions.cs
     MockExternalApi/     FileExternalCatalogSource.cs, catalogue.seed.json
   VM.Server.API/                   # Minimal API endpoints, DI, CORS, Swagger
     Endpoints/           ProductEndpoints.cs, VendingEndpoints.cs, ExternalEndpoints.cs
     Middleware/          ExceptionHandlingMiddleware.cs
+    DTO/                 API-boundary request/response types, suffixed
+                         `RequestDTO`/`ResponseDTO`: CreateProductRequestDTO.cs,
+                         UpdateProductRequestDTO.cs, InsertCoinRequestDTO.cs,
+                         PurchaseRequestDTO.cs, ErrorResponseDTO.cs
     Program.cs
   tests/
-    VM.Server.Domain.Tests/
-    VM.Server.Service.Tests/
-    VM.Server.API.Tests/           # WebApplicationFactory integration tests
+    VM.Server.Service.Tests/       # the only test project — see §4.3
 ```
 
 Dependency direction is strictly `API → Service → Domain`, with
 `Repository` implementing `Service`'s abstractions. **Domain references
-nothing.** Do not let ASP.NET types leak below `API`.
+nothing and contains no logic** — see the service-layer refactor decision log
+entry: Domain was flattened to pure data, and every rule/calculation/state
+transition that used to live on its entities now lives in `VM.Server.Service`.
+Do not let ASP.NET types leak below `API`.
 
 ### 4.2 Conventions
 
 - `Nullable` and `TreatWarningsAsErrors` enabled in `Directory.Build.props`;
   `ImplicitUsings` enabled; `LangVersion latest`.
 - File-scoped namespaces, one type per file, `sealed` by default.
-- Prefer `record` for DTOs and value objects, `class` for entities with identity.
+- Prefer `record` for data-transfer types and value objects, `class` for
+  entities with identity.
+- **Naming for data-transfer types, by which project owns them:**
+  `VM.Server.Service/ServiceModels/*ServiceModel.cs` for anything the Service
+  layer hands back to its callers (`ProductServiceModel`, `SessionServiceModel`,
+  etc.) and `VM.Server.API/DTO/*RequestDTO.cs`/`*ResponseDTO.cs` for the
+  API's own HTTP-boundary shapes (`CreateProductRequestDTO`,
+  `ErrorResponseDTO`). Never mix the two suffixes across the boundary — a
+  type crossing from Service into API keeps its `ServiceModel` name; API
+  endpoints only construct a `RequestDTO`/`ResponseDTO` for shapes Service has
+  no reason to own (see the decision log for which those are and why).
 - **Minimal APIs**, grouped with `MapGroup("/api/products")`, one extension
   method per endpoint group. No MVC controllers.
-- Validation lives in the Service layer and throws `DomainException`
-  carrying an `ErrorCode`; the exception middleware maps it to the §3.3 shape.
-  Do not return raw `ProblemDetails`.
+- **Every rule, calculation and state transition lives in `VM.Server.Service`,
+  nowhere else.** `Domain` entities are plain data (no validation, no guards,
+  no behaviour methods); `Repository` is mechanical (storage lifecycle, file
+  IO); `API` only maps HTTP ⇄ Service service models and error codes ⇄ status
+  codes. Validation throws `DomainException` carrying an `ErrorCode`; the
+  exception middleware maps it to the §3.3 shape. Do not return raw
+  `ProblemDetails`, and do not add a validation check, calculation, or guard
+  anywhere outside `VM.Server.Service` — if you find one, that's the bug, not
+  a shortcut.
+- Domain entities' mutable properties use `internal set` (with
+  `InternalsVisibleTo` scoped to `VM.Server.Service`/`VM.Server.Repository`/
+  `VM.Server.Service.Tests`), so `VM.Server.Service` is the only safe way to
+  mutate state — the API layer physically cannot bypass a service by
+  assigning a property directly.
 - Services are registered as **singletons** (the store and bank *are* the app
   state). Guard all mutations with a single `lock` or `SemaphoreSlim` — treat
   concurrent requests as real.
@@ -283,6 +339,15 @@ nothing.** Do not let ASP.NET types leak below `API`.
 
 ### 4.3 Testing
 
+- **`VM.Server.Service.Tests` is the only test project.** `VM.Server.Domain.Tests`
+  and `VM.Server.API.Tests` were removed in the service-layer refactor —
+  Domain has no behaviour left to unit-test on its own, and every business-rule
+  assertion the API tests carried has been ported here against the real
+  service APIs. **Cost, on the record:** nothing now covers route spelling,
+  JSON wire-shape, the `DomainException` code → HTTP status mapping, or DI
+  wiring at the ASP.NET level — those can break silently and only a manual
+  `curl` pass (or a future, deliberately reintroduced thin API test project)
+  would catch it. See the decision log.
 - xUnit + `FluentAssertions`.
 - Test names: `Method_Scenario_ExpectedResult`
   (e.g. `Purchase_WhenBankCannotMakeChange_RefusesAndReturnsCoins`).
@@ -291,10 +356,13 @@ nothing.** Do not let ASP.NET types leak below `API`.
     empty bank, change of 0;
   - denomination validation incl. €0.01/€0.02 rejection;
   - quantity bounds 0 and 15;
-  - purchase atomicity after a failed purchase;
+  - purchase atomicity after a failed purchase (the single most important
+    test in the project: snapshot slots/bank/session before, compare after);
   - reset returns the *same* denominations that were inserted;
   - duplicate name and duplicate price rejection;
-  - integration: full insert → purchase → change happy path over HTTP.
+  - the change calculator's own algorithmic properties (greedy counterexample,
+    determinism, no mutation of its input, a performance bound) — now proven
+    directly against `ChangeCalculationService`, not through the aggregate.
 - No test may depend on another test's state.
 
 ---
@@ -511,3 +579,11 @@ Rules:
   this in fifteen minutes and judge it.
 - If you cannot run a command, say so plainly — never report a build or test run
   you did not actually perform.
+- **Diagrams live in `docs/diagrams/` and describe the real code.** If a
+  change alters a vending state transition (insert/purchase/reset in
+  `VendingService`) or the change algorithm (`ChangeCalculationService`),
+  update the matching diagram in the same commit and re-verify it renders
+  (`npx -y @mermaid-js/mermaid-cli -i <file>.md -o /tmp/out.svg`, and check the
+  actual rendered text — Mermaid can silently drop content, e.g. collapsing
+  repeated self-loops on one state, without any error). A diagram that has
+  drifted from the code is worse than no diagram.

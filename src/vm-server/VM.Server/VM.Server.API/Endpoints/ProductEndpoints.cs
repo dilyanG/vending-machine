@@ -1,5 +1,6 @@
-using VM.Server.API.Dtos;
-using VM.Server.Service.Products;
+using VM.Server.API.DTO;
+using VM.Server.Service.ServiceModels;
+using VM.Server.Service.Implementations;
 
 namespace VM.Server.API.Endpoints;
 
@@ -10,26 +11,26 @@ public static class ProductEndpoints
         var group = endpoints.MapGroup("/api/products");
 
         group.MapGet("", ListAsync)
-            .Produces<IReadOnlyList<ProductDto>>();
+            .Produces<IReadOnlyList<ProductServiceModel>>();
 
         group.MapGet("/{id:guid}", GetAsync)
-            .Produces<ProductDto>()
-            .Produces<ErrorResponseDto>(StatusCodes.Status404NotFound);
+            .Produces<ProductServiceModel>()
+            .Produces<ErrorResponseDTO>(StatusCodes.Status404NotFound);
 
         group.MapPost("", CreateAsync)
-            .Produces<ProductDto>(StatusCodes.Status201Created)
-            .Produces<ErrorResponseDto>(StatusCodes.Status400BadRequest)
-            .Produces<ErrorResponseDto>(StatusCodes.Status409Conflict);
+            .Produces<ProductServiceModel>(StatusCodes.Status201Created)
+            .Produces<ErrorResponseDTO>(StatusCodes.Status400BadRequest)
+            .Produces<ErrorResponseDTO>(StatusCodes.Status409Conflict);
 
         group.MapPut("/{id:guid}", UpdateAsync)
-            .Produces<ProductDto>()
-            .Produces<ErrorResponseDto>(StatusCodes.Status400BadRequest)
-            .Produces<ErrorResponseDto>(StatusCodes.Status404NotFound)
-            .Produces<ErrorResponseDto>(StatusCodes.Status409Conflict);
+            .Produces<ProductServiceModel>()
+            .Produces<ErrorResponseDTO>(StatusCodes.Status400BadRequest)
+            .Produces<ErrorResponseDTO>(StatusCodes.Status404NotFound)
+            .Produces<ErrorResponseDTO>(StatusCodes.Status409Conflict);
 
         group.MapDelete("/{id:guid}", DeleteAsync)
             .Produces(StatusCodes.Status204NoContent)
-            .Produces<ErrorResponseDto>(StatusCodes.Status404NotFound);
+            .Produces<ErrorResponseDTO>(StatusCodes.Status404NotFound);
 
         group.MapPost("/reload", ReloadAsync)
             .Produces(StatusCodes.Status204NoContent);
@@ -44,14 +45,14 @@ public static class ProductEndpoints
         Results.Ok(await products.GetAsync(id, cancellationToken));
 
     private static async Task<IResult> CreateAsync(
-        CreateProductRequest request, ProductService products, CancellationToken cancellationToken)
+        CreateProductRequestDTO request, ProductService products, CancellationToken cancellationToken)
     {
         var created = await products.CreateAsync(request.Name, request.PriceCents, request.Quantity, request.ImageUrl, cancellationToken);
         return Results.Created($"/api/products/{created.Id}", created);
     }
 
     private static async Task<IResult> UpdateAsync(
-        Guid id, UpdateProductRequest request, ProductService products, CancellationToken cancellationToken)
+        Guid id, UpdateProductRequestDTO request, ProductService products, CancellationToken cancellationToken)
     {
         var updated = await products.UpdateAsync(id, request.Name, request.PriceCents, request.Quantity, request.ImageUrl, cancellationToken);
         return Results.Ok(updated);

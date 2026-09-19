@@ -30,7 +30,7 @@
           }}</vm-badge>
         </td>
         <td class="vm-product-table__actions">
-          <vm-button variant="ghost" size="md" [disabled]="busy()" (click)="edit.emit(product)">
+          <vm-button variant="warning" size="md" [disabled]="busy()" (click)="edit.emit(product)">
             Edit
           </vm-button>
           <vm-button variant="danger" size="md" [disabled]="busy()" (click)="remove.emit(product)">
@@ -61,7 +61,7 @@
         }}</vm-badge>
       </div>
       <div class="vm-product-cards__actions">
-        <vm-button variant="ghost" [disabled]="busy()" (click)="edit.emit(product)">Edit</vm-button>
+        <vm-button variant="warning" [disabled]="busy()" (click)="edit.emit(product)">Edit</vm-button>
         <vm-button variant="danger" [disabled]="busy()" (click)="remove.emit(product)">
           Delete
         </vm-button>
